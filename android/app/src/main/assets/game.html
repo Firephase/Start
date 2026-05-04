@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Math Shapes Shooter</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;font-family:'Courier New',monospace;touch-action:none}
+#c{display:block;width:100vw;height:100vh}
+#hud{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10}
+#sp{position:absolute;top:16px;left:16px;color:#00ff88;font-size:17px;text-shadow:0 0 8px #00ff88;line-height:1.6}
+#wi{position:absolute;top:16px;right:16px;color:#ff8844;font-size:17px;text-align:right;text-shadow:0 0 8px #ff8844;line-height:1.6}
+#hbar{position:absolute;bottom:24px;left:16px}
+#hlabel{color:#ff4444;font-size:13px;margin-bottom:4px;text-shadow:0 0 6px #ff4444}
+#hbg{width:180px;height:14px;background:#222;border:1px solid #444;border-radius:3px;overflow:hidden}
+#hfill{height:100%;background:linear-gradient(90deg,#44ff44,#88ff44);border-radius:3px;transition:width .2s,background .3s}
+#xhair{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:30px;height:30px;pointer-events:none}
+#xhair::before,#xhair::after{content:'';position:absolute;background:rgba(255,255,255,.8);border-radius:2px}
+#xhair::before{width:2px;height:14px;left:14px;top:8px}
+#xhair::after{width:14px;height:2px;left:8px;top:14px}
+#ename{position:absolute;bottom:120px;left:50%;transform:translateX(-50%);color:#ffff00;font-size:18px;text-shadow:0 0 10px #ffff00;opacity:0;transition:opacity .4s;text-align:center;pointer-events:none}
+#flash{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,0,0,.35);pointer-events:none;z-index:40;opacity:0;transition:opacity .3s}
+#sbtn{position:fixed;bottom:50px;right:30px;width:88px;height:88px;border-radius:50%;background:radial-gradient(circle,#ff4444,#800000);border:3px solid #ff6666;color:#fff;font-size:28px;cursor:pointer;z-index:20;box-shadow:0 0 20px #ff000088;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;pointer-events:all;transition:transform .1s,box-shadow .1s}
+#sbtn:active{transform:scale(.88);box-shadow:0 0 50px #ffff00}
+#wave-announce{position:absolute;top:40%;left:50%;transform:translateX(-50%);color:#00ffff;font-size:28px;font-weight:bold;text-shadow:0 0 20px #00ffff;opacity:0;transition:opacity .5s;pointer-events:none;white-space:nowrap}
+/* screens */
+.screen{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;color:#fff;padding:20px}
+.screen h1{font-size:34px;margin-bottom:14px;text-align:center}
+.screen p{margin:7px 0;font-size:15px;color:#bbb;text-align:center;max-width:320px}
+.btn{margin-top:24px;padding:14px 44px;font-size:22px;border:none;border-radius:8px;cursor:pointer;font-family:'Courier New',monospace;font-weight:bold}
+#start-screen h1{color:#00ff88;text-shadow:0 0 20px #00ff88}
+#start-btn{background:#00ff88;color:#000}
+#gameover-screen{display:none}
+#gameover-screen h1{color:#ff4444;text-shadow:0 0 20px #ff4444}
+#fs{font-size:26px;color:#00ff88;margin:10px 0}
+#fw{font-size:18px;color:#aaa;margin-bottom:16px}
+#restart-btn{background:#ff4444;color:#fff}
+#manifold-info{position:absolute;bottom:130px;left:16px;color:#8888ff;font-size:12px;max-width:200px;line-height:1.4;opacity:.8;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div id="sp">
+    <div>SCORE: <span id="sv">0</span></div>
+    <div>KILLS: <span id="kv">0</span></div>
+  </div>
+  <div id="wi">
+    <div>WAVE <span id="wv">1</span></div>
+    <div>ENEMIES: <span id="ec">0</span></div>
+  </div>
+  <div id="xhair"></div>
+  <div id="hbar"><div id="hlabel">HEALTH</div><div id="hbg"><div id="hfill" style="width:100%"></div></div></div>
+  <div id="ename"></div>
+  <div id="wave-announce"></div>
+  <div id="manifold-info"></div>
+</div>
+<div id="flash"></div>
+<button id="sbtn" onclick="shoot()">🔫</button>
+
+<div id="start-screen" class="screen">
+  <h1>MATH SHAPES<br>SHOOTER</h1>
+  <p style="color:#00ff88;font-size:18px">Уничтожай математические многообразия!</p>
+  <p>🔵 Сфера S² &nbsp; 🟢 Тор T²</p>
+  <p>🔷 Лента Мёбиуса &nbsp; 🟣 Бутылка Клейна</p>
+  <p>🌟 3-Сфера S³ &nbsp; 🟠 Поверхность Боя RP²</p>
+  <p style="margin-top:14px">↔ Тяни по экрану — прицел<br>🔫 Кнопка — выстрел</p>
+  <button class="btn" id="start-btn" onclick="startGame()">НАЧАТЬ ИГРУ</button>
+</div>
+
+<div id="gameover-screen" class="screen">
+  <h1>GAME OVER</h1>
+  <div id="fs">СЧЁТ: 0</div>
+  <div id="fw">ВОЛНА: 0</div>
+  <button class="btn" id="restart-btn" onclick="restartGame()">СНОВА</button>
+</div>
+
+<script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
+<script>
+// ============================================================
+// AUDIO ENGINE  (синтезированный саундтрек в стиле "In The End")
+// NOTE: Положи файл "in_the_end.mp3" рядом с игрой для оригинальной музыки Linkin Park
+// ============================================================
+let AC, masterG, musicG, sfxG, musicLoop;
+
+function initAudio() {
+  AC = new (window.AudioContext || window.webkitAudioContext)();
+  masterG = AC.createGain(); masterG.gain.value = 0.85; masterG.connect(AC.destination);
+  musicG  = AC.createGain(); musicG.gain.value  = 0.38; musicG.connect(masterG);
+  sfxG    = AC.createGain(); sfxG.gain.value    = 0.75; sfxG.connect(masterG);
+
+  // Пробуем загрузить оригинальный трек
+  const bgAudio = new Audio('in_the_end.mp3');
+  bgAudio.loop = true; bgAudio.volume = 0.4;
+  bgAudio.play().catch(() => startSynthMusic());
+}
+
+function stopMusic() { if (musicLoop) { clearTimeout(musicLoop); musicLoop = null; } }
+
+// Синтезированная фортепианная мелодия (вдохновлена "In The End" — Dm arpeggio)
+const NOTES = {C3:130.81,D3:146.83,E3:164.81,F3:174.61,G3:196,A3:220,Bb3:233.08,B3:246.94,
+  C4:261.63,D4:293.66,Eb4:311.13,E4:329.63,F4:349.23,G4:392,A4:440,Bb4:466.16,
+  B4:493.88,C5:523.25,D5:587.33,F5:698.46,G5:783.99,A5:880};
+
+const MELODY = [
+  // Dm arpeggio bars
+  ['D4',.5],['A4',.5],['D5',.5],['A4',.5],['F4',.5],['A4',.5],['D4',.5],['F4',.5],
+  // Bb bars
+  ['Bb4',.5],['F4',.5],['D4',.5],['F4',.5],['Bb4',.5],['D4',.5],['F4',.5],['Bb3',.5],
+  // F bars
+  ['F4',.5],['C5',.5],['A4',.5],['C5',.5],['F4',.5],['A4',.5],['C4',.5],['A3',.5],
+  // C bars
+  ['C5',.5],['G4',.5],['E4',.5],['G4',.5],['C4',.5],['E4',.5],['G3',.5],['E4',.5],
+  // Melody lead
+  ['D5',1],['A4',.5],['F4',.5],['D5',1],['Bb4',.5],['A4',.5],
+  ['Bb5',.5],['A5',.5],['G5',1],['F5',.5],['E4',.5],['D4',2],
+];
+
+const BASS = [
+  ['D3',2],['A3',2],['Bb3',2],['F3',2],
+  ['F3',2],['C3',2],['C3',2],['G3',2],
+  ['D3',2],['A3',2],['Bb3',2],['F3',2],
+  ['A3',4]
+];
+
+function playNote(freq, t, dur, vol, dest) {
+  const o = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter();
+  const o2 = AC.createOscillator();
+  o.type = 'triangle'; o.frequency.value = freq;
+  o2.type = 'sine';    o2.frequency.value = freq * 1.004;
+  f.type = 'lowpass';  f.frequency.value = 2800;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + .012);
+  g.gain.setValueAtTime(vol*.65, t + .06);
+  g.gain.exponentialRampToValueAtTime(.001, t + dur*.9);
+  o.connect(f); o2.connect(f); f.connect(g); g.connect(dest);
+  o.start(t); o2.start(t); o.stop(t+dur+.1); o2.stop(t+dur+.1);
+}
+
+function playBass(freq, t, dur, vol) {
+  const o = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter();
+  o.type = 'sawtooth'; o.frequency.value = freq;
+  f.type = 'lowpass';  f.frequency.value = 350; f.Q.value = 3;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t+.05);
+  g.gain.exponentialRampToValueAtTime(.001, t+dur*.75);
+  o.connect(f); f.connect(g); g.connect(musicG);
+  o.start(t); o.stop(t+dur+.1);
+}
+
+function startSynthMusic() {
+  if (!AC || !window.GAME_STARTED) return;
+  const bpm = 86, beat = 60/bpm;
+  let t = AC.currentTime + .1;
+  MELODY.forEach(([n, d]) => { if(NOTES[n]) playNote(NOTES[n], t, d*beat, .38, musicG); t += d*beat; });
+  const loopLen = t - AC.currentTime - .1;
+  let bt = AC.currentTime + .1;
+  BASS.forEach(([n,d]) => { if(NOTES[n]) playBass(NOTES[n], bt, d*beat, .55); bt += d*beat; });
+  musicLoop = setTimeout(startSynthMusic, loopLen * 1000);
+}
+
+function playShotSFX() {
+  if (!AC) return;
+  const buf = AC.createBuffer(1, Math.floor(AC.sampleRate*.08), AC.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random()*2-1) * Math.pow(1-i/d.length, 2.5);
+  const s = AC.createBufferSource(), g = AC.createGain(), f = AC.createBiquadFilter();
+  s.buffer = buf; f.type = 'bandpass'; f.frequency.value = 1200; f.Q.value = .4;
+  g.gain.setValueAtTime(.9, AC.currentTime); g.gain.exponentialRampToValueAtTime(.001, AC.currentTime+.08);
+  s.connect(f); f.connect(g); g.connect(sfxG); s.start();
+
+  // Laser tone
+  const o = AC.createOscillator(), og = AC.createGain();
+  o.type = 'sawtooth'; o.frequency.setValueAtTime(900, AC.currentTime);
+  o.frequency.exponentialRampToValueAtTime(200, AC.currentTime+.07);
+  og.gain.setValueAtTime(.4, AC.currentTime); og.gain.exponentialRampToValueAtTime(.001, AC.currentTime+.07);
+  o.connect(og); og.connect(sfxG); o.start(); o.stop(AC.currentTime+.1);
+}
+
+function playExplosionSFX(sz) {
+  if (!AC) return;
+  const dur = .35*sz;
+  const buf = AC.createBuffer(1, Math.floor(AC.sampleRate*dur), AC.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random()*2-1) * Math.pow(1-i/d.length, 1.2) * Math.min(sz, 1.5);
+  const s = AC.createBufferSource(), g = AC.createGain(), f = AC.createBiquadFilter();
+  s.buffer = buf; f.type = 'lowpass'; f.frequency.value = 600; f.Q.value = 2;
+  g.gain.value = .95; s.connect(f); f.connect(g); g.connect(sfxG); s.start();
+  // Sub boom
+  const o = AC.createOscillator(), og = AC.createGain();
+  o.type = 'sine'; o.frequency.setValueAtTime(120, AC.currentTime);
+  o.frequency.exponentialRampToValueAtTime(30, AC.currentTime+dur);
+  og.gain.setValueAtTime(.8, AC.currentTime); og.gain.exponentialRampToValueAtTime(.001, AC.currentTime+dur);
+  o.connect(og); og.connect(sfxG); o.start(); o.stop(AC.currentTime+dur+.1);
+}
+
+function playHitSFX() {
+  if (!AC) return;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = 'sine'; o.frequency.setValueAtTime(220, AC.currentTime);
+  o.frequency.exponentialRampToValueAtTime(55, AC.currentTime+.25);
+  g.gain.setValueAtTime(.85, AC.currentTime); g.gain.exponentialRampToValueAtTime(.001, AC.currentTime+.3);
+  o.connect(g); g.connect(sfxG); o.start(); o.stop(AC.currentTime+.35);
+}
+
+// ============================================================
+// THREE.JS  SCENE
+// ============================================================
+const W = window.innerWidth, H = window.innerHeight;
+const renderer = new THREE.WebGLRenderer({canvas:document.getElementById('c'), antialias:false});
+renderer.setSize(W,H); renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x000011, .014);
+scene.background = new THREE.Color(0x000008);
+
+const camera = new THREE.PerspectiveCamera(72, W/H, .1, 200);
+
+// Lighting
+scene.add(new THREE.AmbientLight(0x112244, .6));
+const sun = new THREE.DirectionalLight(0x4488ff, 1.2); sun.position.set(5,10,5); scene.add(sun);
+const pLight = new THREE.PointLight(0xff4400, 2, 35); pLight.position.set(0,5,0); scene.add(pLight);
+
+// Stars
+(function() {
+  const g = new THREE.BufferGeometry(), pos = new Float32Array(3000);
+  for (let i=0;i<1000;i++) {
+    const r=60+Math.random()*80, th=Math.random()*Math.PI*2, ph=Math.random()*Math.PI;
+    pos[i*3]=r*Math.sin(ph)*Math.cos(th); pos[i*3+1]=r*Math.cos(ph); pos[i*3+2]=r*Math.sin(ph)*Math.sin(th);
+  }
+  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({color:0xffffff,size:.35,sizeAttenuation:true})));
+})();
+
+// Muzzle flash
+const mFlash = new THREE.PointLight(0xffff00,0,8); scene.add(mFlash);
+
+// ============================================================
+// PARAMETRIC GEOMETRY HELPERS
+// ============================================================
+function buildParametric(fn, uS, vS) {
+  const geo = new THREE.BufferGeometry();
+  const pos=[], uv=[], idx=[];
+  for (let i=0;i<=uS;i++) for (let j=0;j<=vS;j++) {
+    const [x,y,z] = fn(i/uS, j/vS);
+    pos.push(isFinite(x)?x:0, isFinite(y)?y:0, isFinite(z)?z:0);
+    uv.push(i/uS, j/vS);
+  }
+  for (let i=0;i<uS;i++) for (let j=0;j<vS;j++) {
+    const a=i*(vS+1)+j, b=a+1, c=(i+1)*(vS+1)+j, d=c+1;
+    idx.push(a,b,d, a,d,c);
+  }
+  geo.setIndex(idx);
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  geo.setAttribute('uv',       new THREE.Float32BufferAttribute(uv,2));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// Möbius Strip: классическая лента
+function mobiusGeo() {
+  return buildParametric((u,v) => {
+    const s = u*Math.PI*2, t = v*2-1;
+    return [
+      (1+t*.45*Math.cos(s*.5))*Math.cos(s),
+      (1+t*.45*Math.cos(s*.5))*Math.sin(s),
+      t*.45*Math.sin(s*.5)
+    ];
+  }, 60, 14);
+}
+
+// Klein Bottle: фигура-8 погружение
+function kleinGeo() {
+  return buildParametric((u,v) => {
+    const U=u*Math.PI*2, V=v*Math.PI*2;
+    const a=2.5, r=0.5;
+    const x=(a+r*Math.cos(U*.5)*Math.sin(V)-r*Math.sin(U*.5)*Math.sin(2*V))*Math.cos(U);
+    const y=(a+r*Math.cos(U*.5)*Math.sin(V)-r*Math.sin(U*.5)*Math.sin(2*V))*Math.sin(U);
+    const z=r*Math.sin(U*.5)*Math.sin(V)+r*Math.cos(U*.5)*Math.sin(2*V);
+    return [x*.28, y*.28, z*.28];
+  }, 50, 30);
+}
+
+// 3-Sphere S³: Hopf fibration circles (множество окружностей)
+function threeSphereGeo(t) {
+  // Показываем сечение S³: набор кругов Хопфа
+  return buildParametric((u,v) => {
+    const phi=u*Math.PI*2, psi=v*Math.PI*2;
+    const w=Math.cos(t)*.5, r=Math.sqrt(1-w*w);
+    const x=r*Math.cos(phi)*Math.cos(psi);
+    const y=r*Math.cos(phi)*Math.sin(psi);
+    const z=r*Math.sin(phi);
+    const sc=1/(1-w*.45);
+    return [x*sc*.75, y*sc*.75, z*sc*.75];
+  }, 28, 28);
+}
+
+// Boy's Surface RP²
+function boysGeo() {
+  return buildParametric((u,v) => {
+    const U=u*Math.PI, V=v*Math.PI;
+    const sq2=Math.SQRT2;
+    const denom=Math.max(.05, sq2-Math.sin(2*U)*Math.sin(3*V));
+    const cv=Math.cos(V);
+    const x=(sq2*cv*cv*Math.cos(2*U)+Math.cos(U)*Math.sin(2*V))/denom;
+    const y=(sq2*cv*cv*Math.sin(2*U)-Math.sin(U)*Math.sin(2*V))/denom;
+    const z=(3*cv*cv)/(2*denom);
+    return [x*.38, y*.38, (z-.8)*.38];
+  }, 30, 30);
+}
+
+// Roman Surface (ещё одно RP² вложение)
+function romanGeo() {
+  return buildParametric((u,v) => {
+    const U=u*Math.PI*2, V=v*Math.PI;
+    return [
+      Math.sin(2*U)*Math.cos(V)*Math.cos(V)*.8,
+      Math.sin(U)*Math.sin(2*V)*.8,
+      Math.cos(U)*Math.sin(2*V)*.8
+    ];
+  }, 40, 30);
+}
+
+// ============================================================
+// MANIFOLD DEFINITIONS
+// ============================================================
+const MANIFOLDS = [
+  {
+    ru:'Сфера S²', eq:'x²+y²+z²=1',
+    color:0x44aaff, emissive:0x001133,
+    geo:()=>new THREE.SphereGeometry(.85,22,22),
+    hp:1, pts:10, spd:.028, info:'2-мерная сфера. Граница шара в R³'
+  },
+  {
+    ru:'Тор T²', eq:'(√(x²+y²)-R)²+z²=r²',
+    color:0x44ff88, emissive:0x003311,
+    geo:()=>new THREE.TorusGeometry(.75,.28,18,36),
+    hp:2, pts:20, spd:.024, info:'Поверхность тора. S¹×S¹'
+  },
+  {
+    ru:'Лента Мёбиуса', eq:'Неориентируема, граница=S¹',
+    color:0xaa44ff, emissive:0x110033,
+    geo:mobiusGeo,
+    hp:2, pts:30, spd:.022, info:'Односторонняя неориентируемая поверхность'
+  },
+  {
+    ru:'Бутылка Клейна', eq:'Неориентируема, без края',
+    color:0xff44cc, emissive:0x330011,
+    geo:kleinGeo,
+    hp:3, pts:55, spd:.019, info:'Замкнутая неориентируемая поверхность в R³'
+  },
+  {
+    ru:'3-Сфера S³', eq:'x²+y²+z²+w²=1 ⊂ R⁴',
+    color:0xffff44, emissive:0x333300,
+    geo:()=>threeSphereGeo(Date.now()*.0008),
+    hp:5, pts:100, spd:.016, info:'3-мерная сфера в R⁴ (проекция Хопфа)'
+  },
+  {
+    ru:'Поверхность Боя RP²', eq:'RP²=S²/±1',
+    color:0xff8844, emissive:0x331100,
+    geo:boysGeo,
+    hp:4, pts:75, spd:.018, info:'Вещественная проективная плоскость'
+  },
+];
+
+// ============================================================
+// GAME STATE
+// ============================================================
+let enemies=[], bullets=[], particles=[];
+let score=0, kills=0, health=100, wave=1;
+let gameOver=false;
+window.GAME_STARTED=false;
+let wavePool=0, nameTimer=0, frame=0;
+let camYaw=0, camPitch=0;
+
+// ============================================================
+// CREATE / SPAWN
+// ============================================================
+function makeMesh(type) {
+  const geo  = type.geo();
+  const mat  = new THREE.MeshPhongMaterial({color:type.color,emissive:type.emissive,emissiveIntensity:.55,shininess:90,side:THREE.DoubleSide});
+  const mesh = new THREE.Mesh(geo, mat);
+  // Wireframe overlay
+  const wmat = new THREE.MeshBasicMaterial({color:type.color,wireframe:true,opacity:.12,transparent:true});
+  mesh.add(new THREE.Mesh(geo.clone(), wmat));
+  // Glow ring
+  const ringGeo = new THREE.TorusGeometry(1.2,.04,8,40);
+  const ringMat = new THREE.MeshBasicMaterial({color:type.color,transparent:true,opacity:.5});
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = Math.PI*.5;
+  mesh.add(ring);
+  return mesh;
+}
+
+function spawnEnemy(typeIdx) {
+  const availTypes = Math.min(MANIFOLDS.length, 2 + Math.floor(wave * .7));
+  const t = MANIFOLDS[typeIdx !== undefined ? typeIdx : Math.floor(Math.random()*availTypes)];
+  const mesh = makeMesh(t);
+  const dist = 42 + Math.random()*20;
+  const th = Math.random()*Math.PI*2;
+  const ph = (Math.random()-.5)*1.1;
+  mesh.position.set(dist*Math.cos(ph)*Math.cos(th), dist*Math.sin(ph)*.6, dist*Math.cos(ph)*Math.sin(th));
+  scene.add(mesh);
+  enemies.push({
+    mesh, type:t,
+    hp: t.hp*(1+wave*.18),
+    maxHp: t.hp*(1+wave*.18),
+    spd: t.spd*(1+wave*.09),
+    rot: new THREE.Vector3((Math.random()-.5)*.05,(Math.random()-.5)*.05,(Math.random()-.5)*.05),
+    flash:0, dead:false
+  });
+}
+
+let waveSpawnTimer=null;
+function launchWave() {
+  const count = 5 + wave*2;
+  wavePool = count;
+  let spawned=0;
+  function spawnNext() {
+    if (spawned>=count||!window.GAME_STARTED||gameOver) return;
+    spawnEnemy(); spawned++;
+    waveSpawnTimer = setTimeout(spawnNext, Math.max(400, 900-wave*50));
+  }
+  spawnNext();
+  showAnnounce('ВОЛНА ' + wave, 0x00ffff);
+}
+
+// ============================================================
+// BULLETS
+// ============================================================
+const bGeo = new THREE.SphereGeometry(.1,6,6);
+const bMat = new THREE.MeshBasicMaterial({color:0xffff44});
+
+function shoot() {
+  if (!window.GAME_STARTED||gameOver) return;
+  playShotSFX();
+  const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+  const b = new THREE.Mesh(bGeo, bMat.clone());
+  b.position.copy(camera.position).addScaledVector(dir,.6);
+  const bLight = new THREE.PointLight(0xffff00,3,4); b.add(bLight);
+  scene.add(b);
+  bullets.push({mesh:b, vel:dir.clone().multiplyScalar(1.8), life:70});
+  mFlash.intensity=8; setTimeout(()=>{mFlash.intensity=0;},80);
+}
+window.shoot = shoot;
+
+// ============================================================
+// PARTICLES
+// ============================================================
+const pGeo = new THREE.SphereGeometry(.07,4,4);
+function spawnParticles(pos, color, n) {
+  for (let i=0;i<n;i++) {
+    const m=new THREE.Mesh(pGeo, new THREE.MeshBasicMaterial({color,transparent:true,opacity:1}));
+    m.position.copy(pos);
+    const v=new THREE.Vector3((Math.random()-.5)*.4,(Math.random()-.5)*.4,(Math.random()-.5)*.4);
+    scene.add(m);
+    particles.push({mesh:m,vel:v,life:25+Math.floor(Math.random()*25)});
+  }
+}
+
+// ============================================================
+// HUD HELPERS
+// ============================================================
+function setHUD() {
+  document.getElementById('sv').textContent=score;
+  document.getElementById('kv').textContent=kills;
+  document.getElementById('wv').textContent=wave;
+  document.getElementById('ec').textContent=enemies.length;
+  const pct=Math.max(0,health)+'%';
+  document.getElementById('hfill').style.width=pct;
+  document.getElementById('hfill').style.background=
+    health>60?'linear-gradient(90deg,#44ff44,#88ff44)':
+    health>30?'linear-gradient(90deg,#ffff44,#ff8844)':
+              'linear-gradient(90deg,#ff4444,#ff0000)';
+}
+
+function showName(name, info) {
+  const el=document.getElementById('ename');
+  el.textContent=name; el.style.opacity='1'; nameTimer=140;
+  document.getElementById('manifold-info').textContent=info||'';
+}
+
+function showAnnounce(txt, color) {
+  const el=document.getElementById('wave-announce');
+  el.textContent=txt; el.style.color='#'+color.toString(16).padStart(6,'0');
+  el.style.opacity='1';
+  setTimeout(()=>{ el.style.opacity='0'; }, 2200);
+}
+
+// ============================================================
+// CONTROLS  (Touch + Mouse + Keyboard)
+// ============================================================
+let drag=false, lx=0, ly=0;
+
+document.getElementById('c').addEventListener('touchstart', e=>{
+  e.preventDefault(); drag=true; lx=e.touches[0].clientX; ly=e.touches[0].clientY;
+},{passive:false});
+document.getElementById('c').addEventListener('touchmove', e=>{
+  e.preventDefault(); if(!drag) return;
+  camYaw  -= (e.touches[0].clientX-lx)*.0025;
+  camPitch -= (e.touches[0].clientY-ly)*.0025;
+  camPitch = Math.max(-1.4, Math.min(1.4, camPitch));
+  lx=e.touches[0].clientX; ly=e.touches[0].clientY;
+},{passive:false});
+document.getElementById('c').addEventListener('touchend', ()=>{ drag=false; });
+
+document.getElementById('c').addEventListener('mousedown', e=>{ drag=true; lx=e.clientX; ly=e.clientY; });
+document.getElementById('c').addEventListener('mousemove', e=>{
+  if(!drag) return;
+  camYaw  -= (e.clientX-lx)*.003;
+  camPitch -= (e.clientY-ly)*.003;
+  camPitch = Math.max(-1.4, Math.min(1.4, camPitch));
+  lx=e.clientX; ly=e.clientY;
+});
+document.getElementById('c').addEventListener('mouseup', ()=>{ drag=false; });
+document.addEventListener('keydown', e=>{ if(e.code==='Space'||e.code==='Enter') { e.preventDefault(); shoot(); } });
+
+window.addEventListener('resize', ()=>{
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+// ============================================================
+// GAME FLOW
+// ============================================================
+function startGame() {
+  document.getElementById('start-screen').style.display='none';
+  window.GAME_STARTED=true; gameOver=false;
+  initAudio();
+  launchWave();
+}
+window.startGame=startGame;
+
+function restartGame() {
+  enemies.forEach(e=>scene.remove(e.mesh)); enemies.length=0;
+  bullets.forEach(b=>scene.remove(b.mesh)); bullets.length=0;
+  particles.forEach(p=>scene.remove(p.mesh)); particles.length=0;
+  score=0; kills=0; health=100; wave=1; gameOver=false; frame=0;
+  document.getElementById('gameover-screen').style.display='none';
+  setHUD();
+  stopMusic(); if(AC) startSynthMusic();
+  launchWave();
+}
+window.restartGame=restartGame;
+
+function doGameOver() {
+  gameOver=true;
+  document.getElementById('fs').textContent='СЧЁТ: '+score;
+  document.getElementById('fw').textContent='ВОЛНА: '+wave;
+  document.getElementById('gameover-screen').style.display='flex';
+  stopMusic();
+}
+
+// ============================================================
+// MAIN LOOP
+// ============================================================
+const clock = new THREE.Clock();
+function loop() {
+  requestAnimationFrame(loop);
+  frame++;
+  clock.getDelta(); // tick
+
+  // camera
+  camera.quaternion.setFromEuler(new THREE.Euler(camPitch, camYaw, 0, 'YXZ'));
+
+  // ambient light pulse
+  pLight.position.set(Math.sin(frame*.018)*6, 5, Math.cos(frame*.018)*6);
+  pLight.intensity = 1.8 + Math.sin(frame*.04)*.6;
+
+  if (!window.GAME_STARTED || gameOver) { renderer.render(scene,camera); return; }
+
+  // ---- BULLETS ----
+  for (let i=bullets.length-1;i>=0;i--) {
+    const b=bullets[i];
+    b.mesh.position.add(b.vel);
+    b.life--;
+    if (b.life<=0) { scene.remove(b.mesh); bullets.splice(i,1); continue; }
+    let hit=false;
+    for (let j=enemies.length-1;j>=0;j--) {
+      const e=enemies[j]; if(e.dead) continue;
+      if (b.mesh.position.distanceTo(e.mesh.position)<1.6) {
+        e.hp--; e.flash=10;
+        spawnParticles(b.mesh.position.clone(), e.type.color, 8);
+        playShotSFX();
+        if (e.hp<=0) {
+          spawnParticles(e.mesh.position.clone(), e.type.color, 45);
+          playExplosionSFX(e.type.hp*.4+.5);
+          showAnnounce(e.type.ru+' уничтожен!', e.type.color);
+          scene.remove(e.mesh); enemies.splice(j,1);
+          score += e.type.pts*wave; kills++;
+          if (enemies.length===0 && wavePool<=0) {
+            wave++;
+            setTimeout(()=>{ if(!gameOver) launchWave(); }, 3200);
+          }
+        }
+        scene.remove(b.mesh); bullets.splice(i,1); hit=true; break;
+      }
+    }
+  }
+
+  // ---- ENEMIES ----
+  const camDir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+  for (let i=enemies.length-1;i>=0;i--) {
+    const e=enemies[i]; if(e.dead) continue;
+    const dir=e.mesh.position.clone().negate().normalize();
+    e.mesh.position.addScaledVector(dir, e.spd);
+    e.mesh.rotation.x+=e.rot.x; e.mesh.rotation.y+=e.rot.y; e.mesh.rotation.z+=e.rot.z;
+
+    // flash on hit
+    if (e.flash>0) {
+      e.flash--; e.mesh.material.emissiveIntensity = e.flash%2===0?2.5:.4;
+    } else { e.mesh.material.emissiveIntensity=.55; }
+
+    // 3-Sphere pulsate (4D breathing)
+    if (e.type===MANIFOLDS[4]) {
+      const p=1+.18*Math.sin(frame*.09+i);
+      e.mesh.scale.setScalar(p);
+    }
+
+    // show name when aimed at
+    const toE=e.mesh.position.clone().normalize();
+    if (camDir.dot(toE)>.96 && e.mesh.position.length()<35)
+      showName(e.type.ru + '  ' + e.type.eq, e.type.info);
+
+    // hit player
+    if (e.mesh.position.length()<2.8) {
+      const dmg=14+wave*2;
+      health=Math.max(0,health-dmg);
+      scene.remove(e.mesh); enemies.splice(i,1);
+      wavePool=Math.max(0,wavePool-1);
+      const fl=document.getElementById('flash');
+      fl.style.opacity='1'; fl.style.transition='none';
+      setTimeout(()=>{ fl.style.transition='opacity .3s'; fl.style.opacity='0'; },50);
+      playHitSFX();
+      if (health<=0) doGameOver();
+    }
+  }
+
+  // ---- PARTICLES ----
+  for (let i=particles.length-1;i>=0;i--) {
+    const p=particles[i];
+    p.mesh.position.add(p.vel);
+    p.vel.y-=.006; p.vel.multiplyScalar(.94);
+    p.life--;
+    p.mesh.material.opacity=p.life/50;
+    if (p.life<=0) { scene.remove(p.mesh); particles.splice(i,1); }
+  }
+
+  // name fade
+  if (nameTimer>0 && --nameTimer===0) {
+    document.getElementById('ename').style.opacity='0';
+    document.getElementById('manifold-info').textContent='';
+  }
+
+  // refill wave if running dry
+  if (enemies.length<3+wave && wavePool>0 && frame%40===0) {
+    spawnEnemy(); wavePool--;
+  }
+
+  if (frame%12===0) setHUD();
+  renderer.render(scene,camera);
+}
+loop();
+</script>
+</body>
+</html>
