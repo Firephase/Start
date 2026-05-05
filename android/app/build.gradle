@@ -1,0 +1,38 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.mathshooter.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.mathshooter.app"
+        minSdk 24          // Android 7.0+ (WebView with good JS support)
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+        debug {
+            applicationIdSuffix ".debug"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    aaptOptions {
+        noCompress "html", "js", "mp3", "ogg"
+    }
+}
+
+dependencies {
+    // Pure WebView app — no extra dependencies needed
+}
