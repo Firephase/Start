@@ -384,19 +384,77 @@ const Audio = (()=>{
     o.start(t);o.stop(t+.09);
   }
   function playExplosion(delay){
-    if(muted) return; const c=gc(),t=c.currentTime+delay;
-    const bsz=Math.floor(c.sampleRate*.6),buf=c.createBuffer(1,bsz,c.sampleRate),data=buf.getChannelData(0);
-    for(let i=0;i<bsz;i++) data[i]=(Math.random()*2-1)*Math.pow(1-i/bsz,2.5);
-    const src=c.createBufferSource(); src.buffer=buf;
-    const g=c.createGain(),lp=c.createBiquadFilter(),hp=c.createBiquadFilter();
-    lp.type='lowpass';lp.frequency.value=220;hp.type='highpass';hp.frequency.value=30;
-    src.connect(hp);hp.connect(lp);lp.connect(g);g.connect(c.destination);
-    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.9,t+.015);g.gain.exponentialRampToValueAtTime(.001,t+.6);
-    const sub=c.createOscillator(),sg=c.createGain();
-    sub.connect(sg);sg.connect(c.destination);sub.type='sine';
-    sub.frequency.setValueAtTime(80,t);sub.frequency.exponentialRampToValueAtTime(30,t+.2);
-    sg.gain.setValueAtTime(.6,t);sg.gain.exponentialRampToValueAtTime(.001,t+.3);
-    src.start(t);sub.start(t);sub.stop(t+.36);src.stop(t+.66);
+    if(muted) return; const c=gc(), t=c.currentTime+delay;
+
+    // Distortion waveshaper curve
+    function distCurve(amt){
+      const n=512, curve=new Float32Array(n);
+      for(let i=0;i<n;i++){ const x=(i*2)/n-1; curve[i]=((Math.PI+amt)*x)/(Math.PI+amt*Math.abs(x)); }
+      return curve;
+    }
+
+    // Master compressor — даёт жёсткий удар
+    const comp=c.createDynamicsCompressor();
+    comp.threshold.value=-6; comp.knee.value=0; comp.ratio.value=20;
+    comp.attack.value=0.001; comp.release.value=0.4;
+    comp.connect(c.destination);
+
+    // === СЛОЙ 1: резкий начальный ХЛОПОК (distorted white noise, очень быстрый) ===
+    const crSz=Math.floor(c.sampleRate*0.04);
+    const crBuf=c.createBuffer(1,crSz,c.sampleRate), crD=crBuf.getChannelData(0);
+    for(let i=0;i<crSz;i++) crD[i]=(Math.random()*2-1)*Math.pow(1-i/crSz,0.5);
+    const cr=c.createBufferSource(); cr.buffer=crBuf;
+    const crWs=c.createWaveShaper(); crWs.curve=distCurve(600); crWs.oversample='4x';
+    const crHp=c.createBiquadFilter(); crHp.type='highpass'; crHp.frequency.value=1800;
+    const crG=c.createGain();
+    cr.connect(crHp); crHp.connect(crWs); crWs.connect(crG); crG.connect(comp);
+    crG.gain.setValueAtTime(4,t); crG.gain.exponentialRampToValueAtTime(0.001,t+0.06);
+    cr.start(t); cr.stop(t+0.07);
+
+    // === СЛОЙ 2: мощный SUB-BAS удар (питч падает с 90 → 18 Гц) ===
+    const sub1=c.createOscillator(), sub1G=c.createGain(), sub1Ws=c.createWaveShaper();
+    sub1Ws.curve=distCurve(350); sub1Ws.oversample='4x';
+    sub1.connect(sub1Ws); sub1Ws.connect(sub1G); sub1G.connect(comp);
+    sub1.type='sine';
+    sub1.frequency.setValueAtTime(100,t); sub1.frequency.exponentialRampToValueAtTime(18,t+0.5);
+    sub1G.gain.setValueAtTime(0,t); sub1G.gain.linearRampToValueAtTime(3.5,t+0.003);
+    sub1G.gain.exponentialRampToValueAtTime(0.001,t+0.7);
+    sub1.start(t); sub1.stop(t+0.75);
+
+    // === СЛОЙ 3: широкополосный ШУМ взрыва с жёстким distortion ===
+    const nSz=Math.floor(c.sampleRate*2.0);
+    const nBuf=c.createBuffer(1,nSz,c.sampleRate), nD=nBuf.getChannelData(0);
+    for(let i=0;i<nSz;i++){ const env=Math.pow(1-i/nSz,1.8); nD[i]=(Math.random()*2-1)*env; }
+    const ns=c.createBufferSource(); ns.buffer=nBuf;
+    const nsLp=c.createBiquadFilter(); nsLp.type='lowpass'; nsLp.frequency.value=300;
+    const nsWs=c.createWaveShaper(); nsWs.curve=distCurve(280); nsWs.oversample='2x';
+    const nsG=c.createGain();
+    ns.connect(nsLp); nsLp.connect(nsWs); nsWs.connect(nsG); nsG.connect(comp);
+    nsG.gain.setValueAtTime(0,t); nsG.gain.linearRampToValueAtTime(2.5,t+0.008);
+    nsG.gain.exponentialRampToValueAtTime(0.001,t+2.0);
+    ns.start(t); ns.stop(t+2.1);
+
+    // === СЛОЙ 4: средние частоты — гул + distortion (300–900 Гц) ===
+    const mSz=Math.floor(c.sampleRate*1.4);
+    const mBuf=c.createBuffer(1,mSz,c.sampleRate), mD=mBuf.getChannelData(0);
+    for(let i=0;i<mSz;i++) mD[i]=(Math.random()*2-1)*Math.pow(1-i/mSz,2.2);
+    const ms=c.createBufferSource(); ms.buffer=mBuf;
+    const msBp=c.createBiquadFilter(); msBp.type='bandpass'; msBp.frequency.value=500; msBp.Q.value=0.4;
+    const msWs=c.createWaveShaper(); msWs.curve=distCurve(180);
+    const msG=c.createGain();
+    ms.connect(msBp); msBp.connect(msWs); msWs.connect(msG); msG.connect(comp);
+    msG.gain.setValueAtTime(0,t); msG.gain.linearRampToValueAtTime(1.8,t+0.012);
+    msG.gain.exponentialRampToValueAtTime(0.001,t+1.4);
+    ms.start(t); ms.stop(t+1.5);
+
+    // === СЛОЙ 5: второй суб-осциллятор — квадратная волна для дополнительного мяса ===
+    const sub2=c.createOscillator(), sub2G=c.createGain();
+    sub2.connect(sub2G); sub2G.connect(comp);
+    sub2.type='square';
+    sub2.frequency.setValueAtTime(55,t); sub2.frequency.exponentialRampToValueAtTime(22,t+0.3);
+    sub2G.gain.setValueAtTime(0,t); sub2G.gain.linearRampToValueAtTime(0.6,t+0.005);
+    sub2G.gain.exponentialRampToValueAtTime(0.001,t+0.35);
+    sub2.start(t); sub2.stop(t+0.4);
   }
   function playVictory(){
     if(muted) return; const c=gc(),t=c.currentTime;
