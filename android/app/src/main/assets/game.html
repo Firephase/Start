@@ -91,12 +91,11 @@ body{background:#000;overflow:hidden;font-family:'Courier New',monospace;touch-a
 // ============================================================
 let AC, masterG, musicG, sfxG, musicLoop;
 
-let bgAudio = null, musicFileURL = null;
+let musicFile = null, bgAudioSource = null;
 
 function loadMusicFile(file) {
   if (!file) return;
-  if (musicFileURL) URL.revokeObjectURL(musicFileURL);
-  musicFileURL = URL.createObjectURL(file);
+  musicFile = file;
   document.getElementById('music-status').textContent = '✅ ' + file.name;
   document.getElementById('music-status').style.color = '#00ff88';
   document.getElementById('music-label').style.borderColor = '#00ff88';
@@ -106,19 +105,34 @@ function loadMusicFile(file) {
 function initAudio() {
   AC = new (window.AudioContext || window.webkitAudioContext)();
   masterG = AC.createGain(); masterG.gain.value = 0.85; masterG.connect(AC.destination);
-  musicG  = AC.createGain(); musicG.gain.value  = 0.38; musicG.connect(masterG);
+  musicG  = AC.createGain(); musicG.gain.value  = 0.42; musicG.connect(masterG);
   sfxG    = AC.createGain(); sfxG.gain.value    = 0.75; sfxG.connect(masterG);
 
-  if (musicFileURL) {
-    bgAudio = new Audio(musicFileURL);
-    bgAudio.loop = true; bgAudio.volume = 0.42;
-    bgAudio.play().catch(() => startSynthMusic());
+  if (musicFile) {
+    // Читаем файл как ArrayBuffer и декодируем через Web Audio API — работает с file://
+    musicFile.arrayBuffer()
+      .then(buf => AC.decodeAudioData(buf))
+      .then(decoded => {
+        bgAudioSource = AC.createBufferSource();
+        bgAudioSource.buffer = decoded;
+        bgAudioSource.loop = true;
+        bgAudioSource.connect(musicG);
+        bgAudioSource.start();
+        document.getElementById('music-status').textContent = '🎵 In The End — играет';
+      })
+      .catch(() => {
+        document.getElementById('music-status').textContent = '❌ ошибка декодирования — включён синтезатор';
+        startSynthMusic();
+      });
   } else {
     startSynthMusic();
   }
 }
 
-function stopMusic() { if (musicLoop) { clearTimeout(musicLoop); musicLoop = null; } }
+function stopMusic() {
+  if (musicLoop) { clearTimeout(musicLoop); musicLoop = null; }
+  if (bgAudioSource) { try { bgAudioSource.stop(); } catch(e){} bgAudioSource = null; }
+}
 
 // Синтезированная фортепианная мелодия (вдохновлена "In The End" — Dm arpeggio)
 const NOTES = {C3:130.81,D3:146.83,E3:164.81,F3:174.61,G3:196,A3:220,Bb3:233.08,B3:246.94,
