@@ -66,6 +66,13 @@ body{background:#000;overflow:hidden;font-family:'Courier New',monospace;touch-a
   <p>🔷 Лента Мёбиуса &nbsp; 🟣 Бутылка Клейна</p>
   <p>🌟 3-Сфера S³ &nbsp; 🟠 Поверхность Боя RP²</p>
   <p style="margin-top:14px">↔ Тяни по экрану — прицел<br>🔫 Кнопка — выстрел</p>
+  <div style="margin-top:18px;display:flex;flex-direction:column;align-items:center;gap:10px">
+    <label id="music-label" style="cursor:pointer;border:1px solid #555;padding:8px 20px;border-radius:6px;font-size:14px;color:#aaa">
+      🎵 Выбрать музыку (in_the_end.mp3)
+      <input id="music-input" type="file" accept="audio/*" style="display:none" onchange="loadMusicFile(this.files[0])">
+    </label>
+    <div id="music-status" style="font-size:12px;color:#555">нет файла — включится синтезатор</div>
+  </div>
   <button class="btn" id="start-btn" onclick="startGame()">НАЧАТЬ ИГРУ</button>
 </div>
 
@@ -84,16 +91,31 @@ body{background:#000;overflow:hidden;font-family:'Courier New',monospace;touch-a
 // ============================================================
 let AC, masterG, musicG, sfxG, musicLoop;
 
+let bgAudio = null, musicFileURL = null;
+
+function loadMusicFile(file) {
+  if (!file) return;
+  if (musicFileURL) URL.revokeObjectURL(musicFileURL);
+  musicFileURL = URL.createObjectURL(file);
+  document.getElementById('music-status').textContent = '✅ ' + file.name;
+  document.getElementById('music-status').style.color = '#00ff88';
+  document.getElementById('music-label').style.borderColor = '#00ff88';
+  document.getElementById('music-label').style.color = '#00ff88';
+}
+
 function initAudio() {
   AC = new (window.AudioContext || window.webkitAudioContext)();
   masterG = AC.createGain(); masterG.gain.value = 0.85; masterG.connect(AC.destination);
   musicG  = AC.createGain(); musicG.gain.value  = 0.38; musicG.connect(masterG);
   sfxG    = AC.createGain(); sfxG.gain.value    = 0.75; sfxG.connect(masterG);
 
-  // Пробуем загрузить оригинальный трек
-  const bgAudio = new Audio('in_the_end.mp3');
-  bgAudio.loop = true; bgAudio.volume = 0.4;
-  bgAudio.play().catch(() => startSynthMusic());
+  if (musicFileURL) {
+    bgAudio = new Audio(musicFileURL);
+    bgAudio.loop = true; bgAudio.volume = 0.42;
+    bgAudio.play().catch(() => startSynthMusic());
+  } else {
+    startSynthMusic();
+  }
 }
 
 function stopMusic() { if (musicLoop) { clearTimeout(musicLoop); musicLoop = null; } }
