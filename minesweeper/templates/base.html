@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Сапёр{% endblock %}</title>
+  <style>
+    :root {
+      --bg: #0d0d1a;
+      --bg2: #13132b;
+      --bg3: #1a1a35;
+      --border: #2a2a55;
+      --accent: #00e5a0;
+      --accent2: #7c3aed;
+      --danger: #ff4d4d;
+      --warn: #ffa500;
+      --text: #e0e0f0;
+      --text2: #8888aa;
+      --cell-closed: #1e1e42;
+      --cell-open: #111128;
+      --cell-hover: #252558;
+      --cell-border-light: #3a3a70;
+      --cell-border-dark: #0a0a18;
+      --flag-color: #ffa500;
+      --mine-color: #ff4d4d;
+      --num1: #4fc3f7;
+      --num2: #66bb6a;
+      --num3: #ef5350;
+      --num4: #7986cb;
+      --num5: #f06292;
+      --num6: #26c6da;
+      --num7: #ffca28;
+      --num8: #bdbdbd;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+    }
+    nav {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .nav-brand {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 1px;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .nav-brand span { font-size: 1.4rem; }
+    .nav-links { display: flex; align-items: center; gap: 8px; }
+    .nav-user {
+      color: var(--text2);
+      font-size: 0.9rem;
+      margin-right: 12px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 18px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.18s;
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+    }
+    .btn-primary:hover { background: #00ffb3; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,229,160,0.35); }
+    .btn-secondary {
+      background: var(--bg3);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-danger {
+      background: transparent;
+      color: var(--danger);
+      border: 1px solid var(--danger);
+    }
+    .btn-danger:hover { background: var(--danger); color: #fff; }
+    .btn-sm { padding: 5px 12px; font-size: 0.82rem; }
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+    }
+    .form-group { margin-bottom: 18px; }
+    .form-group label {
+      display: block;
+      color: var(--text2);
+      font-size: 0.85rem;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .form-control {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.18s;
+    }
+    .form-control:focus { border-color: var(--accent); }
+    .error-msg {
+      background: rgba(255,77,77,0.12);
+      border: 1px solid var(--danger);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--danger);
+      font-size: 0.9rem;
+      margin-bottom: 18px;
+    }
+    .page-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: calc(100vh - 56px);
+      padding: 24px;
+    }
+    .glow { text-shadow: 0 0 20px var(--accent); }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left;
+      padding: 10px 14px;
+      color: var(--text2);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 11px 14px;
+      border-bottom: 1px solid rgba(42,42,85,0.5);
+      font-size: 0.92rem;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+    .badge-win { background: rgba(0,229,160,0.15); color: var(--accent); }
+    .badge-loss { background: rgba(255,77,77,0.15); color: var(--danger); }
+    .badge-diff { background: rgba(124,58,237,0.2); color: #a78bfa; }
+  </style>
+</head>
+<body>
+{% if session.get('user_id') %}
+<nav>
+  <a class="nav-brand" href="/game"><span>💣</span> САПЁР</a>
+  <div class="nav-links">
+    <span class="nav-user">{{ session.get('username','') }}</span>
+    <a class="btn btn-secondary btn-sm" href="/game">Игра</a>
+    <a class="btn btn-secondary btn-sm" href="/history">История</a>
+    {% if session.get('is_admin') %}
+    <a class="btn btn-secondary btn-sm" href="/admin">Админ</a>
+    {% endif %}
+    <a class="btn btn-danger btn-sm" href="/logout">Выйти</a>
+  </div>
+</nav>
+{% endif %}
+{% block content %}{% endblock %}
+</body>
+</html>

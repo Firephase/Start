@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %}Сапёр — Добро пожаловать{% endblock %}
+{% block content %}
+<div class="page-center">
+  <div style="text-align:center; max-width:480px; width:100%;">
+    <div style="font-size:5rem; margin-bottom:16px;">💣</div>
+    <h1 style="font-size:2.8rem; font-weight:800; color:var(--accent); margin-bottom:8px;" class="glow">САПЁР</h1>
+    <p style="color:var(--text2); margin-bottom:40px; font-size:1.05rem;">Классическая игра с потрясающим звуком и статистикой</p>
+    <div style="display:flex; gap:16px; justify-content:center;">
+      <a class="btn btn-primary" href="/login" style="font-size:1rem; padding:12px 32px;">Войти</a>
+      <a class="btn btn-secondary" href="/register" style="font-size:1rem; padding:12px 32px;">Регистрация</a>
+    </div>
+    <div style="margin-top:48px; display:flex; gap:24px; justify-content:center; flex-wrap:wrap;">
+      <div style="text-align:center;">
+        <div style="font-size:2rem;">🎵</div>
+        <div style="color:var(--text2); font-size:0.85rem; margin-top:4px;">Звуковые эффекты</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:2rem;">🏆</div>
+        <div style="color:var(--text2); font-size:0.85rem; margin-top:4px;">Статистика</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:2rem;">⚙️</div>
+        <div style="color:var(--text2); font-size:0.85rem; margin-top:4px;">Свой уровень</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

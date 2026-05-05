@@ -1,0 +1,882 @@
+{% extends 'base.html' %}
+{% block title %}Сапёр — Игра{% endblock %}
+{% block content %}
+<style>
+  .game-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 40px;
+    min-height: calc(100vh - 56px);
+  }
+  .difficulty-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .diff-btn {
+    padding: 8px 20px;
+    border-radius: 20px;
+    border: 1.5px solid var(--border);
+    background: var(--bg2);
+    color: var(--text2);
+    cursor: pointer;
+    font-size: 0.88rem;
+    font-weight: 600;
+    transition: all 0.18s;
+  }
+  .diff-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .diff-btn.active { background: var(--accent); border-color: var(--accent); color: #000; }
+  .hud {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 24px;
+    margin-bottom: 20px;
+    width: 100%;
+    max-width: 600px;
+    justify-content: space-between;
+  }
+  .hud-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .hud-val {
+    font-size: 1.6rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 1px;
+    min-width: 48px;
+    text-align: center;
+  }
+  .hud-label { font-size: 0.72rem; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+  .hud-mines { color: var(--danger); }
+  .hud-time { color: var(--accent); }
+  #reset-btn {
+    font-size: 1.6rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.15s;
+    padding: 4px 8px;
+    border-radius: 8px;
+  }
+  #reset-btn:hover { transform: scale(1.2); }
+  .board-container {
+    overflow: auto;
+    max-width: 100%;
+  }
+  #board {
+    display: grid;
+    gap: 2px;
+    background: var(--bg2);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 10px;
+    user-select: none;
+  }
+  .cell {
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.1s, transform 0.08s;
+    position: relative;
+    overflow: hidden;
+    aspect-ratio: 1;
+  }
+  .cell.closed {
+    background: var(--cell-closed);
+    box-shadow: inset -2px -2px 0 var(--cell-border-dark), inset 2px 2px 0 var(--cell-border-light);
+  }
+  .cell.closed:hover {
+    background: var(--cell-hover);
+    transform: scale(0.95);
+  }
+  .cell.open {
+    background: var(--cell-open);
+    box-shadow: inset 1px 1px 3px rgba(0,0,0,0.5);
+    cursor: default;
+  }
+  .cell.flagged { background: var(--cell-closed); box-shadow: inset -2px -2px 0 var(--cell-border-dark), inset 2px 2px 0 var(--cell-border-light); }
+  .cell.mine-explode { background: #3d0000; animation: explode 0.4s ease-out forwards; }
+  .cell.mine-hit { background: #ff1a1a !important; }
+  .cell.wrong-flag { background: #3d1a00; }
+  @keyframes explode {
+    0% { transform: scale(1); background: #3d0000; }
+    30% { transform: scale(1.3); background: #ff6600; }
+    60% { transform: scale(1.1); background: #ff3300; }
+    100% { transform: scale(1); background: #3d0000; }
+  }
+  @keyframes reveal {
+    0% { transform: scale(0.7); opacity: 0; }
+    60% { transform: scale(1.08); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .cell.open { animation: reveal 0.15s ease-out; }
+  .cell.flagged .flag-icon { animation: flagIn 0.2s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+  @keyframes flagIn {
+    0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  }
+  .n1 { color: var(--num1); }
+  .n2 { color: var(--num2); }
+  .n3 { color: var(--num3); }
+  .n4 { color: var(--num4); }
+  .n5 { color: var(--num5); }
+  .n6 { color: var(--num6); }
+  .n7 { color: var(--num7); }
+  .n8 { color: var(--num8); }
+  /* Overlay */
+  #overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  #overlay.show { display: flex; }
+  .overlay-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 40px 48px;
+    text-align: center;
+    animation: popIn 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    max-width: 420px;
+    width: 90%;
+  }
+  @keyframes popIn {
+    from { transform: scale(0.6); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  .overlay-icon { font-size: 4rem; margin-bottom: 12px; }
+  .overlay-title { font-size: 1.8rem; font-weight: 800; margin-bottom: 8px; }
+  .overlay-sub { color: var(--text2); margin-bottom: 28px; font-size: 0.95rem; }
+  .overlay-stats { display: flex; gap: 24px; justify-content: center; margin-bottom: 28px; }
+  .overlay-stat { text-align: center; }
+  .overlay-stat-val { font-size: 1.4rem; font-weight: 700; }
+  .overlay-stat-label { font-size: 0.75rem; color: var(--text2); }
+  /* Custom modal */
+  #custom-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 300;
+    align-items: center;
+    justify-content: center;
+  }
+  #custom-modal.show { display: flex; }
+  .custom-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    width: 320px;
+  }
+  .custom-card h3 { margin-bottom: 20px; font-size: 1.2rem; }
+  input[type=range] { width: 100%; accent-color: var(--accent); margin: 6px 0; }
+  .range-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--text2); }
+  .range-val { font-weight: 700; color: var(--accent); min-width: 36px; text-align: right; }
+  /* Confetti */
+  .confetti-piece {
+    position: fixed;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    pointer-events: none;
+    z-index: 500;
+    animation: confettiFall linear forwards;
+  }
+  @keyframes confettiFall {
+    0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+  }
+  .sound-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text2);
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.18s;
+  }
+  .sound-btn:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+
+<div class="game-wrap">
+  <!-- Difficulty bar -->
+  <div class="difficulty-bar">
+    <button class="diff-btn active" data-diff="easy">🟢 Лёгкий</button>
+    <button class="diff-btn" data-diff="medium">🟡 Средний</button>
+    <button class="diff-btn" data-diff="hard">🔴 Тяжёлый</button>
+    <button class="diff-btn" data-diff="custom" id="custom-btn">⚙️ Свой</button>
+  </div>
+
+  <!-- HUD -->
+  <div class="hud">
+    <div class="hud-item">
+      <div class="hud-val hud-mines" id="mines-left">010</div>
+      <div class="hud-label">💣 Мины</div>
+    </div>
+    <button id="reset-btn" title="Новая игра">😀</button>
+    <div class="hud-item">
+      <div class="hud-val hud-time" id="timer">000</div>
+      <div class="hud-label">⏱ Секунды</div>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:8px; margin-bottom:14px; align-items:center;">
+    <button class="sound-btn" id="sound-toggle" title="Звук вкл/выкл">🔊</button>
+    <span style="color:var(--text2); font-size:0.8rem;">ЛКМ — открыть &nbsp;|&nbsp; ПКМ — флаг</span>
+  </div>
+
+  <!-- Board -->
+  <div class="board-container">
+    <div id="board"></div>
+  </div>
+</div>
+
+<!-- Win/Loss overlay -->
+<div id="overlay">
+  <div class="overlay-card">
+    <div class="overlay-icon" id="ov-icon">🎉</div>
+    <div class="overlay-title" id="ov-title">Победа!</div>
+    <div class="overlay-sub" id="ov-sub">Все мины найдены</div>
+    <div class="overlay-stats">
+      <div class="overlay-stat">
+        <div class="overlay-stat-val" id="ov-time">0</div>
+        <div class="overlay-stat-label">секунд</div>
+      </div>
+      <div class="overlay-stat">
+        <div class="overlay-stat-val" id="ov-mines">0</div>
+        <div class="overlay-stat-label">мин</div>
+      </div>
+    </div>
+    <div style="display:flex; gap:12px; justify-content:center;">
+      <button class="btn btn-primary" id="ov-replay">Играть снова</button>
+      <a class="btn btn-secondary" href="/history">История</a>
+    </div>
+  </div>
+</div>
+
+<!-- Custom difficulty modal -->
+<div id="custom-modal">
+  <div class="custom-card">
+    <h3>⚙️ Свой уровень</h3>
+    <div class="form-group">
+      <div class="range-row"><label>Строк</label><span class="range-val" id="rows-val">10</span></div>
+      <input type="range" id="rows-range" min="5" max="30" value="10">
+    </div>
+    <div class="form-group">
+      <div class="range-row"><label>Столбцов</label><span class="range-val" id="cols-val">10</span></div>
+      <input type="range" id="cols-range" min="5" max="50" value="10">
+    </div>
+    <div class="form-group">
+      <div class="range-row"><label>Мин</label><span class="range-val" id="mines-val">15</span></div>
+      <input type="range" id="mines-range" min="1" max="400" value="15">
+    </div>
+    <div id="mines-warn" style="font-size:0.8rem; color:var(--warn); margin-bottom:12px; display:none;">
+      ⚠️ Мин не может быть больше 80% клеток
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-primary" id="custom-apply" style="flex:1; justify-content:center;">Применить</button>
+      <button class="btn btn-secondary" id="custom-cancel" style="flex:1; justify-content:center;">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== AUDIO SYSTEM =====
+const Audio = (() => {
+  let ctx = null;
+  let muted = false;
+
+  function getCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+
+  function playFlag(isSet) {
+    if (muted) return;
+    const c = getCtx();
+    const t = c.currentTime;
+    const osc1 = c.createOscillator();
+    const osc2 = c.createOscillator();
+    const gain = c.createGain();
+    osc1.connect(gain); osc2.connect(gain);
+    gain.connect(c.destination);
+    osc1.type = 'sine'; osc2.type = 'triangle';
+    if (isSet) {
+      osc1.frequency.setValueAtTime(440, t);
+      osc1.frequency.exponentialRampToValueAtTime(880, t + 0.12);
+      osc2.frequency.setValueAtTime(660, t);
+      osc2.frequency.exponentialRampToValueAtTime(1320, t + 0.12);
+      gain.gain.setValueAtTime(0.25, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    } else {
+      osc1.frequency.setValueAtTime(880, t);
+      osc1.frequency.exponentialRampToValueAtTime(330, t + 0.12);
+      osc2.frequency.setValueAtTime(660, t);
+      gain.gain.setValueAtTime(0.18, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    }
+    osc1.start(t); osc1.stop(t + 0.25);
+    osc2.start(t); osc2.stop(t + 0.25);
+  }
+
+  function playReveal() {
+    if (muted) return;
+    const c = getCtx();
+    const t = c.currentTime;
+    const osc = c.createOscillator();
+    const gain = c.createGain();
+    const filter = c.createBiquadFilter();
+    filter.type = 'bandpass'; filter.frequency.value = 800; filter.Q.value = 0.5;
+    osc.connect(filter); filter.connect(gain); gain.connect(c.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(500, t);
+    osc.frequency.exponentialRampToValueAtTime(180, t + 0.06);
+    gain.gain.setValueAtTime(0.18, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+    osc.start(t); osc.stop(t + 0.08);
+  }
+
+  function playExplosion(delay) {
+    if (muted) return;
+    const c = getCtx();
+    const t = c.currentTime + delay;
+    const bufSz = Math.floor(c.sampleRate * 0.6);
+    const buf = c.createBuffer(1, bufSz, c.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSz; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufSz, 2.5);
+    }
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const gain = c.createGain();
+    const lp = c.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 220;
+    const hp = c.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 30;
+    src.connect(hp); hp.connect(lp); lp.connect(gain); gain.connect(c.destination);
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.9, t + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+    // sub bass thump
+    const sub = c.createOscillator();
+    const subGain = c.createGain();
+    sub.connect(subGain); subGain.connect(c.destination);
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(80, t);
+    sub.frequency.exponentialRampToValueAtTime(30, t + 0.2);
+    subGain.gain.setValueAtTime(0.6, t);
+    subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    src.start(t); sub.start(t); sub.stop(t + 0.35); src.stop(t + 0.65);
+  }
+
+  function playVictory() {
+    if (muted) return;
+    const c = getCtx();
+    const t = c.currentTime;
+    const melody = [
+      { f: 523.25, d: 0, dur: 0.18 },
+      { f: 659.25, d: 0.12, dur: 0.18 },
+      { f: 783.99, d: 0.24, dur: 0.18 },
+      { f: 1046.5, d: 0.38, dur: 0.45 },
+      { f: 880,    d: 0.52, dur: 0.18 },
+      { f: 1046.5, d: 0.68, dur: 0.55 },
+    ];
+    melody.forEach(({ f, d, dur }) => {
+      const osc = c.createOscillator();
+      const g = c.createGain();
+      osc.connect(g); g.connect(c.destination);
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(f, t + d);
+      g.gain.setValueAtTime(0, t + d);
+      g.gain.linearRampToValueAtTime(0.32, t + d + 0.02);
+      g.gain.setValueAtTime(0.32, t + d + dur - 0.05);
+      g.gain.linearRampToValueAtTime(0, t + d + dur);
+      osc.start(t + d); osc.stop(t + d + dur + 0.05);
+    });
+    // chord stab at end
+    [523.25, 659.25, 783.99].forEach((f, i) => {
+      const osc = c.createOscillator();
+      const g = c.createGain();
+      osc.connect(g); g.connect(c.destination);
+      osc.type = 'sine';
+      osc.frequency.value = f;
+      g.gain.setValueAtTime(0, t + 0.78);
+      g.gain.linearRampToValueAtTime(0.2 - i * 0.04, t + 0.8);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 1.6);
+      osc.start(t + 0.78); osc.stop(t + 1.65);
+    });
+  }
+
+  return {
+    playFlag, playReveal, playExplosion, playVictory,
+    toggleMute() {
+      muted = !muted;
+      return muted;
+    },
+    isMuted() { return muted; }
+  };
+})();
+
+// ===== GAME STATE =====
+const DIFFICULTIES = {
+  easy:   { rows: 9,  cols: 9,  mines: 10 },
+  medium: { rows: 16, cols: 16, mines: 40 },
+  hard:   { rows: 16, cols: 30, mines: 99 },
+};
+
+let state = {
+  diff: 'easy',
+  rows: 9, cols: 9, mines: 10,
+  board: [],       // { mine, adj, open, flagged }
+  gameOver: false,
+  won: false,
+  started: false,
+  startTime: 0,
+  elapsed: 0,
+  timerInterval: null,
+  flagCount: 0,
+  firstClick: true,
+};
+
+function cellIndex(r, c) { return r * state.cols + c; }
+function inBounds(r, c) { return r >= 0 && r < state.rows && c >= 0 && c < state.cols; }
+
+function initBoard() {
+  state.board = Array.from({ length: state.rows * state.cols }, () => ({
+    mine: false, adj: 0, open: false, flagged: false
+  }));
+  state.gameOver = false;
+  state.won = false;
+  state.started = false;
+  state.firstClick = true;
+  state.flagCount = 0;
+  state.elapsed = 0;
+  clearInterval(state.timerInterval);
+  state.timerInterval = null;
+  updateHUD();
+  renderBoard();
+  document.getElementById('reset-btn').textContent = '😀';
+}
+
+function placeMines(safeR, safeC) {
+  const forbidden = new Set();
+  for (let dr = -1; dr <= 1; dr++)
+    for (let dc = -1; dc <= 1; dc++)
+      if (inBounds(safeR + dr, safeC + dc))
+        forbidden.add(cellIndex(safeR + dr, safeC + dc));
+
+  let placed = 0;
+  const total = state.rows * state.cols;
+  while (placed < state.mines) {
+    const idx = Math.floor(Math.random() * total);
+    if (!state.board[idx].mine && !forbidden.has(idx)) {
+      state.board[idx].mine = true;
+      placed++;
+    }
+  }
+  // calculate adjacencies
+  for (let r = 0; r < state.rows; r++) {
+    for (let c = 0; c < state.cols; c++) {
+      if (state.board[cellIndex(r, c)].mine) continue;
+      let count = 0;
+      for (let dr = -1; dr <= 1; dr++)
+        for (let dc = -1; dc <= 1; dc++)
+          if ((dr || dc) && inBounds(r + dr, c + dc) && state.board[cellIndex(r + dr, c + dc)].mine)
+            count++;
+      state.board[cellIndex(r, c)].adj = count;
+    }
+  }
+}
+
+function revealCell(r, c) {
+  if (state.gameOver) return;
+  const idx = cellIndex(r, c);
+  const cell = state.board[idx];
+  if (cell.open || cell.flagged) return;
+
+  if (state.firstClick) {
+    state.firstClick = false;
+    placeMines(r, c);
+    state.started = true;
+    state.startTime = Date.now();
+    state.timerInterval = setInterval(() => {
+      state.elapsed = Math.floor((Date.now() - state.startTime) / 1000);
+      updateHUD();
+    }, 200);
+  }
+
+  cell.open = true;
+  Audio.playReveal();
+  updateCellEl(r, c);
+
+  if (cell.mine) {
+    triggerLoss(r, c);
+    return;
+  }
+
+  if (cell.adj === 0) {
+    for (let dr = -1; dr <= 1; dr++)
+      for (let dc = -1; dc <= 1; dc++)
+        if ((dr || dc) && inBounds(r + dr, c + dc))
+          revealCell(r + dr, c + dc);
+  }
+
+  checkWin();
+}
+
+function toggleFlag(r, c) {
+  if (state.gameOver || !state.started && !state.firstClick) {
+    if (!state.firstClick) return;
+  }
+  const cell = state.board[cellIndex(r, c)];
+  if (cell.open) return;
+  cell.flagged = !cell.flagged;
+  state.flagCount += cell.flagged ? 1 : -1;
+  Audio.playFlag(cell.flagged);
+  updateCellEl(r, c);
+  updateHUD();
+}
+
+function checkWin() {
+  const allSafe = state.board.every(c => c.mine || c.open);
+  if (!allSafe) return;
+  state.gameOver = true;
+  state.won = true;
+  clearInterval(state.timerInterval);
+  document.getElementById('reset-btn').textContent = '😎';
+  // Flag all remaining mines
+  state.board.forEach((cell, idx) => {
+    if (cell.mine && !cell.flagged) {
+      cell.flagged = true;
+      const r = Math.floor(idx / state.cols), c = idx % state.cols;
+      updateCellEl(r, c);
+    }
+  });
+  Audio.playVictory();
+  spawnConfetti();
+  setTimeout(() => showOverlay(true), 600);
+  saveGame('win');
+}
+
+function triggerLoss(hitR, hitC) {
+  state.gameOver = true;
+  clearInterval(state.timerInterval);
+  document.getElementById('reset-btn').textContent = '😵';
+
+  // Find all mines
+  const mines = [];
+  state.board.forEach((cell, idx) => {
+    if (cell.mine) mines.push(idx);
+  });
+
+  // Mark wrong flags first
+  state.board.forEach((cell, idx) => {
+    if (cell.flagged && !cell.mine) {
+      const r = Math.floor(idx / state.cols), c = idx % state.cols;
+      cell.open = true;
+      updateCellEl(r, c, 'wrong-flag');
+    }
+  });
+
+  // Reveal hit cell immediately
+  const hitEl = getCellEl(hitR, hitC);
+  if (hitEl) { hitEl.classList.add('mine-hit'); hitEl.textContent = '💥'; }
+
+  // Sequential mine explosions
+  const otherMines = mines.filter(idx => idx !== cellIndex(hitR, hitC));
+  otherMines.sort(() => Math.random() - 0.5);
+  otherMines.forEach((idx, i) => {
+    const delay = (i + 1) * 250;
+    setTimeout(() => {
+      const r = Math.floor(idx / state.cols), c = idx % state.cols;
+      const cell = state.board[idx];
+      if (!cell.flagged) {
+        cell.open = true;
+        const el = getCellEl(r, c);
+        if (el) {
+          el.classList.remove('closed');
+          el.classList.add('mine-explode');
+          el.textContent = '💣';
+        }
+      }
+      Audio.playExplosion((i * 0.01));
+    }, delay);
+  });
+
+  Audio.playExplosion(0);
+  const totalDelay = otherMines.length * 250 + 500;
+  setTimeout(() => showOverlay(false), totalDelay);
+  saveGame('loss');
+}
+
+function showOverlay(win) {
+  document.getElementById('ov-icon').textContent = win ? '🎉' : '💥';
+  document.getElementById('ov-title').textContent = win ? 'Победа!' : 'Подрыв!';
+  document.getElementById('ov-sub').textContent = win
+    ? 'Все мины обезврежены!'
+    : 'Поле взорвано. Попробуй ещё раз!';
+  document.getElementById('ov-time').textContent = state.elapsed;
+  document.getElementById('ov-mines').textContent = state.mines;
+  document.getElementById('overlay').classList.add('show');
+}
+
+function saveGame(result) {
+  fetch('/api/save_game', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      difficulty: state.diff,
+      rows: state.rows,
+      cols: state.cols,
+      mines: state.mines,
+      result: result,
+      duration: state.elapsed
+    })
+  }).catch(() => {});
+}
+
+// ===== RENDERING =====
+function cellSize() {
+  const maxW = Math.min(window.innerWidth - 40, 900);
+  const maxH = window.innerHeight - 280;
+  const byW = Math.floor((maxW - state.cols * 2 - 20) / state.cols);
+  const byH = Math.floor((maxH - state.rows * 2 - 20) / state.rows);
+  return Math.max(16, Math.min(byW, byH, 42));
+}
+
+function renderBoard() {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  const sz = cellSize();
+  board.style.gridTemplateColumns = `repeat(${state.cols}, ${sz}px)`;
+  board.style.gridTemplateRows = `repeat(${state.rows}, ${sz}px)`;
+  const fontSize = Math.max(10, Math.floor(sz * 0.5));
+
+  for (let r = 0; r < state.rows; r++) {
+    for (let c = 0; c < state.cols; c++) {
+      const el = document.createElement('div');
+      el.className = 'cell closed';
+      el.dataset.r = r;
+      el.dataset.c = c;
+      el.style.width = sz + 'px';
+      el.style.height = sz + 'px';
+      el.style.fontSize = fontSize + 'px';
+      el.addEventListener('click', onCellClick);
+      el.addEventListener('contextmenu', onCellRightClick);
+      el.addEventListener('touchstart', onTouchStart, { passive: true });
+      el.addEventListener('touchend', onTouchEnd);
+      board.appendChild(el);
+    }
+  }
+}
+
+function getCellEl(r, c) {
+  return document.querySelector(`#board .cell[data-r="${r}"][data-c="${c}"]`);
+}
+
+const NUM_CLASSES = ['', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8'];
+
+function updateCellEl(r, c, extra) {
+  const el = getCellEl(r, c);
+  if (!el) return;
+  const cell = state.board[cellIndex(r, c)];
+  el.className = 'cell';
+  el.textContent = '';
+
+  if (extra === 'wrong-flag') {
+    el.classList.add('wrong-flag');
+    el.textContent = '❌';
+    return;
+  }
+
+  if (cell.flagged && !cell.open) {
+    el.classList.add('flagged');
+    const icon = document.createElement('span');
+    icon.className = 'flag-icon';
+    icon.textContent = '🚩';
+    el.appendChild(icon);
+    return;
+  }
+
+  if (!cell.open) {
+    el.classList.add('closed');
+    return;
+  }
+
+  el.classList.add('open');
+  if (cell.mine) {
+    el.textContent = '💣';
+  } else if (cell.adj > 0) {
+    el.classList.add(NUM_CLASSES[cell.adj]);
+    el.textContent = cell.adj;
+  }
+}
+
+function updateHUD() {
+  const minesLeft = state.mines - state.flagCount;
+  document.getElementById('mines-left').textContent = String(minesLeft).padStart(3, '0');
+  document.getElementById('timer').textContent = String(state.elapsed).padStart(3, '0');
+}
+
+// ===== INPUT HANDLERS =====
+function onCellClick(e) {
+  const r = +e.currentTarget.dataset.r;
+  const c = +e.currentTarget.dataset.c;
+  revealCell(r, c);
+}
+
+function onCellRightClick(e) {
+  e.preventDefault();
+  const r = +e.currentTarget.dataset.r;
+  const c = +e.currentTarget.dataset.c;
+  toggleFlag(r, c);
+}
+
+let touchTimer = null;
+let touchMoved = false;
+function onTouchStart(e) {
+  touchMoved = false;
+  touchTimer = setTimeout(() => {
+    if (!touchMoved) {
+      const r = +e.currentTarget.dataset.r;
+      const c = +e.currentTarget.dataset.c;
+      toggleFlag(r, c);
+      touchTimer = null;
+    }
+  }, 500);
+}
+function onTouchEnd(e) {
+  if (touchTimer) {
+    clearTimeout(touchTimer);
+    touchTimer = null;
+    const r = +e.currentTarget.dataset.r;
+    const c = +e.currentTarget.dataset.c;
+    revealCell(r, c);
+  }
+}
+
+// ===== CONFETTI =====
+function spawnConfetti() {
+  const colors = ['#00e5a0','#7c3aed','#ffa500','#ff4d4d','#4fc3f7','#fff'];
+  for (let i = 0; i < 80; i++) {
+    const el = document.createElement('div');
+    el.className = 'confetti-piece';
+    el.style.left = Math.random() * 100 + 'vw';
+    el.style.background = colors[Math.floor(Math.random() * colors.length)];
+    el.style.width = (6 + Math.random() * 8) + 'px';
+    el.style.height = (6 + Math.random() * 8) + 'px';
+    el.style.animationDuration = (1.5 + Math.random() * 2) + 's';
+    el.style.animationDelay = Math.random() * 0.5 + 's';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 4000);
+  }
+}
+
+// ===== DIFFICULTY UI =====
+document.querySelectorAll('.diff-btn[data-diff]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const diff = btn.dataset.diff;
+    if (diff === 'custom') {
+      openCustomModal();
+      return;
+    }
+    document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const cfg = DIFFICULTIES[diff];
+    state.diff = diff;
+    state.rows = cfg.rows;
+    state.cols = cfg.cols;
+    state.mines = cfg.mines;
+    initBoard();
+  });
+});
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+  document.getElementById('overlay').classList.remove('show');
+  initBoard();
+});
+
+document.getElementById('ov-replay').addEventListener('click', () => {
+  document.getElementById('overlay').classList.remove('show');
+  initBoard();
+});
+
+// Sound toggle
+const soundBtn = document.getElementById('sound-toggle');
+soundBtn.addEventListener('click', () => {
+  const muted = Audio.toggleMute();
+  soundBtn.textContent = muted ? '🔇' : '🔊';
+});
+
+// ===== CUSTOM MODAL =====
+function openCustomModal() {
+  document.getElementById('custom-modal').classList.add('show');
+  syncMinesRange();
+}
+
+function syncMinesRange() {
+  const rows = +document.getElementById('rows-range').value;
+  const cols = +document.getElementById('cols-range').value;
+  const maxMines = Math.floor(rows * cols * 0.8);
+  const minesRange = document.getElementById('mines-range');
+  minesRange.max = maxMines;
+  if (+minesRange.value > maxMines) minesRange.value = maxMines;
+  document.getElementById('mines-val').textContent = minesRange.value;
+  document.getElementById('rows-val').textContent = rows;
+  document.getElementById('cols-val').textContent = cols;
+}
+
+document.getElementById('rows-range').addEventListener('input', syncMinesRange);
+document.getElementById('cols-range').addEventListener('input', syncMinesRange);
+document.getElementById('mines-range').addEventListener('input', () => {
+  document.getElementById('mines-val').textContent = document.getElementById('mines-range').value;
+});
+
+document.getElementById('custom-apply').addEventListener('click', () => {
+  const rows = +document.getElementById('rows-range').value;
+  const cols = +document.getElementById('cols-range').value;
+  const mines = +document.getElementById('mines-range').value;
+  if (mines >= rows * cols) { return; }
+  document.getElementById('custom-modal').classList.remove('show');
+  document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('custom-btn').classList.add('active');
+  state.diff = 'custom';
+  state.rows = rows;
+  state.cols = cols;
+  state.mines = mines;
+  initBoard();
+});
+
+document.getElementById('custom-cancel').addEventListener('click', () => {
+  document.getElementById('custom-modal').classList.remove('show');
+});
+
+// Close overlay on backdrop click
+document.getElementById('overlay').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('show');
+});
+
+// ===== INIT =====
+initBoard();
+</script>
+{% endblock %}

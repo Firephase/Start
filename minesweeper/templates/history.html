@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% block title %}История игр — Сапёр{% endblock %}
+{% block content %}
+<div style="max-width:860px; margin:0 auto; padding:32px 16px;">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:12px;">
+    <div>
+      <h1 style="font-size:1.6rem; font-weight:800;">История игр</h1>
+      <div style="color:var(--text2); font-size:0.9rem; margin-top:2px;">Игрок: <strong style="color:var(--accent);">{{ username }}</strong></div>
+    </div>
+    <a class="btn btn-primary btn-sm" href="/game">▶ Играть</a>
+  </div>
+
+  <!-- Stats cards -->
+  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:28px;">
+    <div class="card" style="padding:20px; text-align:center;">
+      <div style="font-size:1.8rem; font-weight:800;">{{ games|length }}</div>
+      <div style="color:var(--text2); font-size:0.8rem; margin-top:4px;">Всего игр</div>
+    </div>
+    <div class="card" style="padding:20px; text-align:center;">
+      <div style="font-size:1.8rem; font-weight:800; color:var(--accent);">{{ wins }}</div>
+      <div style="color:var(--text2); font-size:0.8rem; margin-top:4px;">Победы</div>
+    </div>
+    <div class="card" style="padding:20px; text-align:center;">
+      <div style="font-size:1.8rem; font-weight:800; color:var(--danger);">{{ losses }}</div>
+      <div style="color:var(--text2); font-size:0.8rem; margin-top:4px;">Поражения</div>
+    </div>
+    <div class="card" style="padding:20px; text-align:center;">
+      <div style="font-size:1.8rem; font-weight:800; color:var(--warn);">
+        {% if games|length > 0 %}{{ ((wins / games|length) * 100)|round|int }}%{% else %}—{% endif %}
+      </div>
+      <div style="color:var(--text2); font-size:0.8rem; margin-top:4px;">Процент побед</div>
+    </div>
+  </div>
+
+  {% if games %}
+  <div class="card" style="padding:0; overflow:hidden;">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Дата</th>
+          <th>Уровень</th>
+          <th>Поле</th>
+          <th>Мины</th>
+          <th>Время</th>
+          <th>Итог</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for game in games %}
+        <tr>
+          <td style="color:var(--text2);">{{ loop.index }}</td>
+          <td>{{ game.played_at.strftime('%d.%m.%Y %H:%M') }}</td>
+          <td>
+            <span class="badge badge-diff">
+              {% if game.difficulty == 'easy' %}🟢 Лёгкий
+              {% elif game.difficulty == 'medium' %}🟡 Средний
+              {% elif game.difficulty == 'hard' %}🔴 Тяжёлый
+              {% else %}⚙️ Свой{% endif %}
+            </span>
+          </td>
+          <td style="color:var(--text2);">{{ game.rows }}×{{ game.cols }}</td>
+          <td style="color:var(--danger);">💣 {{ game.mines }}</td>
+          <td style="color:var(--accent); font-variant-numeric:tabular-nums;">{{ game.duration }}с</td>
+          <td>
+            {% if game.result == 'win' %}
+            <span class="badge badge-win">🏆 Победа</span>
+            {% else %}
+            <span class="badge badge-loss">💥 Взрыв</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card" style="text-align:center; padding:60px 32px;">
+    <div style="font-size:3rem; margin-bottom:12px;">🎮</div>
+    <div style="color:var(--text2);">Игр пока нет. Сыграйте первую!</div>
+    <a class="btn btn-primary" href="/game" style="margin-top:20px; display:inline-flex;">Начать игру</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
