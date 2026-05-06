@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Yoda Jump</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    canvas { display: block; cursor: pointer; }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<script>
+'use strict';
+
+// ─── Canvas & Scale ────────────────────────────────────────────────────────
+const canvas = document.getElementById('gameCanvas');
+const ctx    = canvas.getContext('2d');
+
+const GW = 400, GH = 600;
+let scale = 1;
+
+function resize() {
+  scale = Math.min(window.innerWidth / GW, window.innerHeight / GH);
+  canvas.width  = GW;
+  canvas.height = GH;
+  canvas.style.width  = (GW * scale) + 'px';
+  canvas.style.height = (GH * scale) + 'px';
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ctx.roundRect polyfill for older WebViews
+if (!ctx.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+    this.beginPath();
+    this.moveTo(x + r, y);
+    this.lineTo(x + w - r, y);
+    this.arcTo(x + w, y, x + w, y + r, r);
+    this.lineTo(x + w, y + h - r);
+    this.arcTo(x + w, y + h, x + w - r, y + h, r);
+    this.lineTo(x + r, y + h);
+    this.arcTo(x, y + h, x, y + h - r, r);
+    this.lineTo(x, y + r);
+    this.arcTo(x, y, x + r, y, r);
+    this.closePath();
+  };
+}
+
+// ─── Constants ─────────────────────────────────────────────────────────────
+const GRAVITY    = 0.38;
+const MOVE_SPEED = 6;
+const PLAT_H     = 12;
+
+// ─── Difficulty configs ─────────────────────────────────────────────────────
+const DIFF = {
+  easy: {
+    gap: 72, enemySpeed: 0.9, enemyChance: 0.13,
+    movChance: 0.10, brkChance: 0.05, jumpForce: -13.5,
+    label: 'EASY', color: '#4CAF50'
+  },
+  medium: {
+    gap: 100, enemySpeed: 1.7, enemyChance: 0.26,
+    movChance: 0.20, brkChance: 0.10, jumpForce: -14.5,
+    label: 'MEDIUM', color: '#FF9800'
+  },
+  hard: {
+    gap: 132, enemySpeed: 2.7, enemyChance: 0.40,
+    movChance: 0.35, brkChance: 0.20, jumpForce: -15.5,
+    label: 'HARD', color: '#F44336'
+  }
+};
+let diff = 'medium';
+
+// ─── State ─────────────────────────────────────────────────────────────────
+const S = { MENU: 0, PLAYING: 1, GAMEOVER: 2 };
+let state = S.MENU;
+
+let score    = 0;
+let highScore = +localStorage.getItem('yjHS') || 0;
+let kills    = 0;
+let camY     = 0;
+let maxH     = 0;
+
+let platforms    = [];
+let enemies      = [];
+let particles    = [];
+let scorePopups  = [];
+
+// ─── Yoda ──────────────────────────────────────────────────────────────────
+const yoda = {
+  x: GW / 2, y: GH - 100,
+  w: 44, h: 54,
+  vx: 0, vy: 0,
+  lives: 3,
+  invTimer: 0,
+  swingActive: false,
+  swingTimer: 0,
+  swingAngle: -Math.PI / 3,
+  swingCooldown: 0,
+  facingLeft: false,
+
+  reset() {
+    this.x = GW / 2; this.y = GH - 80;
+    this.vx = 0; this.vy = DIFF[diff].jumpForce;
+    this.lives = 3; this.invTimer = 0;
+    this.swingActive = false; this.swingTimer = 0;
+    this.swingAngle = -Math.PI / 3; this.swingCooldown = 0;
+    this.facingLeft = false;
+  }
+};
+
+// ─── Input ─────────────────────────────────────────────────────────────────
+const keys = {};
+let touchStartX = null, touchCurX = null;
+
+document.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if ((e.key === ' ' || e.key === 'ArrowUp') && state === S.PLAYING) triggerSwing();
+});
+document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  const r = canvas.getBoundingClientRect();
+  const rx = (t.clientX - r.left) / scale;
+  const ry = (t.clientY - r.top)  / scale;
+  touchStartX = rx; touchCurX = rx;
+  if (state !== S.PLAYING) handleClick(rx, ry);
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  touchCurX = (e.touches[0].clientX - canvas.getBoundingClientRect().left) / scale;
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  if (state === S.PLAYING && touchStartX !== null && Math.abs(touchCurX - touchStartX) < 15) {
+    triggerSwing();
+  }
+  touchStartX = null; touchCurX = null;
+}, { passive: false });
+
+canvas.addEventListener('click', e => {
+  const r = canvas.getBoundingClientRect();
+  handleClick((e.clientX - r.left) / scale, (e.clientY - r.top) / scale);
+});
+
+function handleClick(x, y) {
+  if (state === S.MENU) {
+    ['easy', 'medium', 'hard'].forEach((d, i) => {
+      const bx = GW / 2 + (i - 1) * 112;
+      if (Math.abs(x - bx) < 43 && Math.abs(y - 348) < 22) diff = d;
+    });
+    if (Math.abs(x - GW / 2) < 85 && Math.abs(y - 455) < 30) startGame();
+  } else if (state === S.GAMEOVER) {
+    if (Math.abs(x - GW / 2) < 90 && Math.abs(y - 410) < 28) startGame();
+    if (Math.abs(x - GW / 2) < 70 && Math.abs(y - 470) < 24) state = S.MENU;
+  }
+}
+
+function triggerSwing() {
+  if (!yoda.swingActive && yoda.swingCooldown <= 0) {
+    yoda.swingActive = true;
+    yoda.swingTimer  = 0;
+  }
+}
+
+// ─── Platform helpers ───────────────────────────────────────────────────────
+function makePlatform(y, cfg, isStart = false) {
+  const w   = isStart ? 120 : 68 + Math.random() * 22;
+  const x   = isStart ? GW / 2 - w / 2 : 10 + Math.random() * (GW - w - 20);
+  const mov = !isStart && Math.random() < cfg.movChance;
+  const brk = !isStart && !mov && Math.random() < cfg.brkChance;
+  const p   = {
+    x, y, w, h: PLAT_H,
+    type: isStart ? 'normal' : (mov ? 'moving' : (brk ? 'breaking' : 'normal')),
+    moving: mov, breaking: brk, broken: false, hits: brk ? 1 : 0,
+    mDir: Math.random() < 0.5 ? 1 : -1,
+    mSpd: mov ? (0.8 + Math.random()) * cfg.enemySpeed * 0.6 : 0
+  };
+  if (!isStart && Math.random() < cfg.enemyChance && !brk) addEnemy(p, cfg);
+  return p;
+}
+
+function addEnemy(p, cfg) {
+  const type = ['sith', 'trooper', 'probe'][Math.floor(Math.random() * 3)];
+  enemies.push({
+    x: p.x + p.w / 2, y: p.y - 22,
+    w: 28, h: 28,
+    vx: (Math.random() < 0.5 ? 1 : -1) * cfg.enemySpeed,
+    type, alive: true, plat: p,
+    hitTimer: 0, bobT: Math.random() * Math.PI * 2, deathT: 0
+  });
+}
+
+function genPlatforms() {
+  platforms = []; enemies = [];
+  const cfg = DIFF[diff];
+  platforms.push(makePlatform(GH - 70, cfg, true));
+  let y = GH - 70 - cfg.gap;
+  while (y > -GH * 2) {
+    platforms.push(makePlatform(y + Math.random() * 12 - 6, cfg));
+    y -= cfg.gap + Math.random() * 22;
+  }
+}
+
+function extendPlatforms() {
+  const cfg = DIFF[diff];
+  let minY   = platforms.reduce((m, p) => Math.min(m, p.y), Infinity);
+  const tgt  = camY - GH * 1.6;
+  while (minY > tgt) {
+    const ny = minY - cfg.gap - Math.random() * 22;
+    platforms.push(makePlatform(ny, cfg));
+    minY = ny;
+  }
+}
+
+// ─── Game lifecycle ─────────────────────────────────────────────────────────
+function startGame() {
+  score = 0; kills = 0; camY = 0; maxH = 0;
+  particles = []; scorePopups = [];
+  yoda.reset();
+  genPlatforms();
+  state = S.PLAYING;
+}
+
+function endGame() {
+  if (score > highScore) {
+    highScore = score;
+    localStorage.setItem('yjHS', highScore);
+  }
+  state = S.GAMEOVER;
+}
+
+// ─── Particles ──────────────────────────────────────────────────────────────
+function burst(x, y, color, n = 10) {
+  for (let i = 0; i < n; i++) {
+    const a  = Math.random() * Math.PI * 2;
+    const sp = 1.5 + Math.random() * 4;
+    particles.push({
+      x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.5,
+      life: 1, decay: 0.025 + Math.random() * 0.03,
+      r: 2.5 + Math.random() * 3.5, color
+    });
+  }
+}
+
+// ─── Update ─────────────────────────────────────────────────────────────────
+function update() {
+  if (state !== S.PLAYING) return;
+  const cfg = DIFF[diff];
+
+  // Movement input
+  if (keys['ArrowLeft'] || keys['a']) {
+    yoda.vx = -MOVE_SPEED; yoda.facingLeft = true;
+  } else if (keys['ArrowRight'] || keys['d']) {
+    yoda.vx = MOVE_SPEED;  yoda.facingLeft = false;
+  } else if (touchStartX !== null && touchCurX !== null) {
+    const dx = touchCurX - touchStartX;
+    if (Math.abs(dx) > 8) {
+      yoda.vx = Math.sign(dx) * MOVE_SPEED;
+      yoda.facingLeft = dx < 0;
+    } else { yoda.vx *= 0.85; }
+  } else { yoda.vx *= 0.85; }
+
+  // Physics
+  yoda.vy += GRAVITY;
+  yoda.x  += yoda.vx;
+  yoda.y  += yoda.vy;
+
+  // Wrap horizontally
+  if (yoda.x > GW + 22) yoda.x = -22;
+  else if (yoda.x < -22) yoda.x = GW + 22;
+
+  // Camera follows upward
+  if (yoda.y - camY < GH * 0.38) camY = yoda.y - GH * 0.38;
+
+  // Score
+  const h = -camY;
+  if (h > maxH) { maxH = h; score = Math.floor(maxH / 8); }
+
+  // Timers
+  if (yoda.invTimer > 0) yoda.invTimer--;
+  if (yoda.swingCooldown > 0) yoda.swingCooldown--;
+
+  // Lightsaber swing arc animation
+  if (yoda.swingActive) {
+    yoda.swingTimer++;
+    const t = yoda.swingTimer / 32;
+    yoda.swingAngle = -Math.PI / 3 + t * (Math.PI + Math.PI / 3);
+    if (yoda.swingTimer >= 32) {
+      yoda.swingActive = false;
+      yoda.swingTimer  = 0;
+      yoda.swingAngle  = -Math.PI / 3;
+      yoda.swingCooldown = 90;
+    }
+  } else if (yoda.swingCooldown <= 0) {
+    // Auto-swing when enemy nearby
+    const near = enemies.some(e =>
+      e.alive && Math.abs(e.x - yoda.x) < 130 && Math.abs(e.y - yoda.y) < 130);
+    if (near) triggerSwing();
+  }
+
+  // Platform collisions (only when falling)
+  if (yoda.vy > 0) {
+    const yb  = yoda.y + yoda.h / 2;
+    const pyb = yb - yoda.vy;
+    for (const p of platforms) {
+      if (p.broken) continue;
+      if (
+        pyb <= p.y + p.h && yb >= p.y &&
+        yoda.x + yoda.w * 0.38 > p.x &&
+        yoda.x - yoda.w * 0.38 < p.x + p.w
+      ) {
+        yoda.vy = cfg.jumpForce;
+        yoda.y  = p.y - yoda.h / 2;
+        if (p.breaking) {
+          p.hits--;
+          if (p.hits <= 0) { p.broken = true; burst(p.x + p.w / 2, p.y - camY, '#cc6633', 8); }
+        }
+        break;
+      }
+    }
+  }
+
+  // Move moving platforms
+  for (const p of platforms) {
+    if (!p.moving) continue;
+    p.x += p.mDir * p.mSpd;
+    if (p.x <= 0 || p.x + p.w >= GW) p.mDir *= -1;
+  }
+
+  // Enemies
+  for (const e of enemies) {
+    if (!e.alive) { e.deathT++; continue; }
+    e.bobT += 0.07;
+    e.x    += e.vx;
+
+    // Patrol on platform
+    if (e.plat) {
+      if (e.x < e.plat.x + e.w / 2 + 2 || e.x > e.plat.x + e.plat.w - e.w / 2 - 2) e.vx *= -1;
+    } else {
+      if (e.x < 14 || e.x > GW - 14) e.vx *= -1;
+    }
+    if (e.hitTimer > 0) e.hitTimer--;
+
+    // Lightsaber hit (generous hitbox during swing)
+    if (yoda.swingActive) {
+      const dist = Math.hypot(e.x - yoda.x, e.y - yoda.y);
+      if (dist < 68) {
+        e.alive  = false;
+        e.deathT = 0;
+        kills++;
+        score   += 50;
+        scorePopups.push({ x: e.x, y: e.y - camY, val: '+50', life: 1, vy: -1.8 });
+        burst(e.x, e.y - camY, '#ffcc44', 14);
+      }
+    }
+
+    // Body collision (enemy touching Yoda = damage if not invincible)
+    if (yoda.invTimer <= 0) {
+      const dx = Math.abs(e.x - yoda.x);
+      const dy = Math.abs(e.y - yoda.y);
+      if (dx < (e.w + yoda.w) / 2 - 8 && dy < (e.h + yoda.h) / 2 - 10) {
+        if (e.hitTimer <= 0) {
+          yoda.lives--;
+          yoda.invTimer = 90;
+          e.hitTimer    = 60;
+          yoda.vy       = -9;
+          burst(yoda.x, yoda.y - camY, '#ff4444', 8);
+          if (yoda.lives <= 0) endGame();
+        }
+      }
+    }
+  }
+
+  enemies   = enemies.filter(e => e.alive || e.deathT < 28);
+  platforms = platforms.filter(p => p.y < camY + GH + 350);
+  extendPlatforms();
+
+  for (const p of particles) {
+    p.x += p.vx; p.y += p.vy; p.vy += 0.13; p.life -= p.decay;
+  }
+  particles = particles.filter(p => p.life > 0);
+
+  for (const p of scorePopups) { p.y += p.vy; p.life -= 0.028; }
+  scorePopups = scorePopups.filter(p => p.life > 0);
+
+  if (yoda.y > camY + GH + 250) endGame();
+}
+
+// ─── Drawing helpers ─────────────────────────────────────────────────────────
+function drawBG() {
+  const g = ctx.createLinearGradient(0, 0, 0, GH);
+  g.addColorStop(0, '#030318');
+  g.addColorStop(1, '#060828');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, GW, GH);
+
+  // Scrolling stars
+  const base = Math.floor(camY / 150);
+  for (let i = 0; i < 70; i++) {
+    const sx = (i * 157 + base * 53) % GW;
+    const sy = (i * 211 + base * 19) % GH;
+    const s  = i % 6 === 0 ? 2 : 1;
+    ctx.globalAlpha = 0.4 + (i % 4) * 0.15;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(sx, sy, s, s);
+  }
+  ctx.globalAlpha = 1;
+
+  // Occasional nebula clouds
+  ctx.globalAlpha = 0.04;
+  ctx.fillStyle = '#4466ff';
+  ctx.beginPath();
+  ctx.ellipse(60, (200 - camY % 400), 80, 50, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#884488';
+  ctx.beginPath();
+  ctx.ellipse(320, (450 - camY % 600), 100, 60, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function drawPlatform(p) {
+  const sy = p.y - camY;
+  if (sy < -20 || sy > GH + 20) return;
+  let c1, c2;
+  if (p.type === 'normal')   { c1 = '#3a7a22'; c2 = '#285018'; }
+  else if (p.type === 'moving') { c1 = '#1a6a9a'; c2 = '#0a4a78'; }
+  else { c1 = p.broken ? '#882211' : '#bb5522'; c2 = '#772211'; }
+
+  ctx.fillStyle = c1;
+  ctx.strokeStyle = c2;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(p.x, sy, p.w, p.h, 4);
+  ctx.fill();
+  ctx.stroke();
+
+  // Shine strip
+  ctx.fillStyle = 'rgba(255,255,255,0.14)';
+  ctx.fillRect(p.x + 5, sy + 2, p.w - 10, 3);
+
+  // Breaking cracks
+  if (p.breaking && !p.broken) {
+    ctx.strokeStyle = 'rgba(255,120,30,0.6)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(p.x + p.w * 0.3, sy + 2);
+    ctx.lineTo(p.x + p.w * 0.5, sy + 10);
+    ctx.lineTo(p.x + p.w * 0.7, sy + 4);
+    ctx.stroke();
+  }
+}
+
+// Yoda drawn at cx,cy (center x, feet y)
+function drawYodaShape(cx, cy, swingAngle, swingActive, facingLeft, alpha) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  if (facingLeft) ctx.scale(-1, 1);
+  ctx.globalAlpha = alpha;
+
+  const top = -54 / 2; // half height up from feet center
+
+  // --- Body robe ---
+  ctx.fillStyle = '#2c3912';
+  ctx.beginPath();
+  ctx.roundRect(-14, top + 22, 28, 32, 5);
+  ctx.fill();
+
+  // Belt
+  ctx.fillStyle = '#18210a';
+  ctx.fillRect(-14, top + 38, 28, 7);
+
+  // Feet
+  ctx.fillStyle = '#22300f';
+  ctx.fillRect(-13, top + 47, 11, 7);
+  ctx.fillRect(2, top + 47, 11, 7);
+
+  // --- Head ---
+  ctx.fillStyle = '#567824';
+  ctx.beginPath();
+  ctx.ellipse(0, top + 13, 15, 13, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Left ear
+  ctx.beginPath();
+  ctx.moveTo(-12, top + 14); ctx.lineTo(-32, top + 3);
+  ctx.lineTo(-27, top + 19); ctx.lineTo(-10, top + 22);
+  ctx.closePath(); ctx.fill();
+
+  // Right ear
+  ctx.beginPath();
+  ctx.moveTo(12, top + 14); ctx.lineTo(32, top + 3);
+  ctx.lineTo(27, top + 19); ctx.lineTo(10, top + 22);
+  ctx.closePath(); ctx.fill();
+
+  // Eyes
+  ctx.fillStyle = '#0a1a04';
+  ctx.beginPath(); ctx.ellipse(-5, top + 11, 3.2, 4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 5, top + 11, 3.2, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+  // Eye glints
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.beginPath(); ctx.arc(-4, top + 9, 1.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc( 6, top + 9, 1.2, 0, Math.PI * 2); ctx.fill();
+
+  // Wrinkles
+  ctx.strokeStyle = '#385218'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(-7, top + 17); ctx.lineTo(-4, top + 19); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo( 7, top + 17); ctx.lineTo( 4, top + 19); ctx.stroke();
+
+  // --- Lightsaber ---
+  ctx.save();
+  ctx.translate(16, top + 28);
+  ctx.rotate(swingAngle);
+
+  // Handle
+  ctx.fillStyle = '#888';
+  ctx.fillRect(-3, 0, 6, 13);
+  ctx.fillStyle = '#555';
+  ctx.fillRect(-2, 3, 4, 2);
+  ctx.fillRect(-2, 8, 4, 2);
+
+  // Outer glow when swinging
+  if (swingActive) {
+    ctx.shadowColor = '#00ffaa';
+    ctx.shadowBlur  = 28;
+    ctx.fillStyle   = 'rgba(0,255,160,0.12)';
+    ctx.fillRect(-9, -44, 18, 44);
+  }
+
+  // Blade gradient
+  const bladeG = ctx.createLinearGradient(0, 0, 0, -42);
+  bladeG.addColorStop(0, '#00ff88');
+  bladeG.addColorStop(0.6, '#00dd66');
+  bladeG.addColorStop(1, 'rgba(0,200,100,0.35)');
+  ctx.fillStyle   = bladeG;
+  ctx.shadowColor = '#00ff88';
+  ctx.shadowBlur  = swingActive ? 20 : 10;
+  ctx.fillRect(-2.5, -42, 5, 42);
+
+  // Bright core
+  ctx.fillStyle  = 'rgba(255,255,255,0.85)';
+  ctx.shadowBlur = 0;
+  ctx.fillRect(-1, -42, 2, 42);
+
+  ctx.restore(); // lightsaber
+  ctx.restore(); // yoda
+}
+
+function drawYoda() {
+  const alpha = yoda.invTimer > 0
+    ? (0.45 + Math.abs(Math.sin(yoda.invTimer * 0.25)) * 0.55) : 1;
+  drawYodaShape(yoda.x, yoda.y - camY, yoda.swingAngle, yoda.swingActive, yoda.facingLeft, alpha);
+}
+
+// Enemy sprite drawers
+function drawSith(ctx) {
+  ctx.fillStyle = '#1a0606';
+  ctx.beginPath(); ctx.ellipse(0, 0, 11, 12, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#110404';
+  ctx.beginPath(); ctx.moveTo(-11, -2); ctx.lineTo(0, -20); ctx.lineTo(11, -2); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ff2200';
+  ctx.shadowColor = '#ff0000'; ctx.shadowBlur = 8;
+  ctx.beginPath(); ctx.ellipse(-4, -1, 2.5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse( 4, -1, 2.5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ff3300'; ctx.shadowColor = '#ff0000'; ctx.shadowBlur = 10;
+  ctx.fillRect(10, -24, 3, 24);
+  ctx.fillStyle = '#ffaaaa'; ctx.shadowBlur = 0; ctx.fillRect(11, -24, 1, 24);
+}
+
+function drawTrooper(ctx) {
+  ctx.fillStyle = '#dde8e8';
+  ctx.beginPath(); ctx.ellipse(0, 0, 12, 13, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#222';
+  ctx.beginPath(); ctx.ellipse(0, -1, 7, 4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#bbb'; ctx.fillRect(-5, 5, 3, 2); ctx.fillRect(2, 5, 3, 2);
+  ctx.fillStyle = '#ccd8d8'; ctx.fillRect(-9, 10, 18, 10);
+  ctx.fillStyle = '#444'; ctx.fillRect(9, 1, 11, 3);
+}
+
+function drawProbe(ctx) {
+  ctx.fillStyle = '#445566';
+  ctx.beginPath(); ctx.ellipse(0, 0, 13, 11, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ff4400'; ctx.shadowColor = '#ff4400'; ctx.shadowBlur = 12;
+  ctx.beginPath(); ctx.ellipse(0, 0, 5, 5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffaa00'; ctx.shadowBlur = 0;
+  ctx.beginPath(); ctx.ellipse(0, 0, 2, 2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#556677'; ctx.lineWidth = 2;
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + Math.PI / 6;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * 13, Math.sin(a) * 11);
+    ctx.lineTo(Math.cos(a) * 21, Math.sin(a) * 19);
+    ctx.stroke();
+    ctx.fillStyle = '#778899';
+    ctx.beginPath(); ctx.arc(Math.cos(a) * 21, Math.sin(a) * 19, 3, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function drawEnemies() {
+  for (const e of enemies) {
+    const sy = e.y - camY;
+    if (sy < -55 || sy > GH + 55) continue;
+    ctx.save();
+    ctx.translate(e.x, sy + Math.sin(e.bobT) * 3);
+    if (!e.alive) {
+      const t = e.deathT / 28;
+      ctx.globalAlpha = 1 - t;
+      ctx.scale(1 + t * 0.6, 1 + t * 0.6);
+    } else if (e.hitTimer > 0) {
+      ctx.globalAlpha = 0.35 + Math.abs(Math.sin(e.hitTimer * 0.4)) * 0.65;
+    }
+    if (e.type === 'sith')    drawSith(ctx);
+    else if (e.type === 'trooper') drawTrooper(ctx);
+    else                           drawProbe(ctx);
+    ctx.restore();
+  }
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle   = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawScorePopups() {
+  ctx.textAlign = 'center';
+  for (const p of scorePopups) {
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle   = '#ffcc44';
+    ctx.font        = 'bold 16px monospace';
+    ctx.fillText(p.val, p.x, p.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD() {
+  // Score
+  ctx.textAlign = 'left';
+  ctx.font      = 'bold 20px monospace';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(score.toString(), 12, 32);
+
+  // Lives
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = i < yoda.lives ? '#ff4466' : '#333';
+    ctx.font      = '22px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText('♥', GW - 10 - i * 24, 32);
+  }
+
+  // Difficulty badge
+  ctx.textAlign = 'center';
+  ctx.font      = '11px monospace';
+  ctx.fillStyle = DIFF[diff].color;
+  ctx.fillText(DIFF[diff].label, GW / 2, 18);
+
+  // Lightsaber cooldown bar
+  if (!yoda.swingActive && yoda.swingCooldown > 0) {
+    const bw = 72, bx = GW / 2 - bw / 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(bx, 27, bw, 7);
+    ctx.fillStyle = '#00ff88';
+    ctx.fillRect(bx, 27, bw * (1 - yoda.swingCooldown / 90), 7);
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '9px monospace';
+    ctx.fillText('SABER', GW / 2, 40);
+  } else if (yoda.swingActive) {
+    ctx.fillStyle   = '#00ff88';
+    ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 10;
+    ctx.font        = 'bold 13px monospace';
+    ctx.fillText('⚡ SLASH ⚡', GW / 2, 38);
+    ctx.shadowBlur  = 0;
+  }
+
+  // Kill count
+  if (kills > 0) {
+    ctx.textAlign = 'left';
+    ctx.font      = '13px monospace';
+    ctx.fillStyle = '#ff9944';
+    ctx.fillText('☠ ' + kills, 12, 52);
+  }
+}
+
+// ─── Menu screen ─────────────────────────────────────────────────────────────
+function drawMenu() {
+  drawBG();
+
+  // Title
+  ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 35;
+  ctx.fillStyle   = '#00ff88';
+  ctx.font        = 'bold 44px monospace';
+  ctx.textAlign   = 'center';
+  ctx.fillText('YODA JUMP', GW / 2, 92);
+  ctx.shadowBlur  = 0;
+
+  ctx.fillStyle = '#88cc44';
+  ctx.font      = '15px monospace';
+  ctx.fillText('"Jump, you must!"', GW / 2, 122);
+
+  // Yoda on menu (bigger)
+  ctx.save();
+  ctx.scale(1.5, 1.5);
+  drawYodaShape(GW / 2 / 1.5, 200 / 1.5, -0.45, true, false, 1);
+  ctx.restore();
+
+  // Difficulty label
+  ctx.fillStyle = '#cccccc';
+  ctx.font      = 'bold 14px monospace';
+  ctx.fillText('DIFFICULTY:', GW / 2, 308);
+
+  // Difficulty buttons
+  ['easy', 'medium', 'hard'].forEach((d, i) => {
+    const bx  = GW / 2 + (i - 1) * 112;
+    const sel = diff === d;
+    ctx.fillStyle  = sel ? DIFF[d].color : 'rgba(255,255,255,0.07)';
+    ctx.strokeStyle = DIFF[d].color;
+    ctx.lineWidth  = sel ? 0 : 2;
+    ctx.beginPath(); ctx.roundRect(bx - 44, 328, 88, 40, 9);
+    if (!sel) ctx.stroke(); ctx.fill();
+    ctx.fillStyle = sel ? '#fff' : DIFF[d].color;
+    ctx.font      = (sel ? 'bold ' : '') + '13px monospace';
+    ctx.fillText(DIFF[d].label, bx, 353);
+  });
+
+  // High score
+  if (highScore > 0) {
+    ctx.fillStyle = '#ffcc44';
+    ctx.font      = '14px monospace';
+    ctx.fillText('Best: ' + highScore, GW / 2, 392);
+  }
+
+  // Play button
+  ctx.fillStyle   = '#00bb55';
+  ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 22;
+  ctx.beginPath(); ctx.roundRect(GW / 2 - 88, 420, 176, 58, 14); ctx.fill();
+  ctx.shadowBlur  = 0;
+  ctx.fillStyle   = '#fff';
+  ctx.font        = 'bold 26px monospace';
+  ctx.fillText('▶  PLAY!', GW / 2, 456);
+
+  // Controls hint
+  ctx.fillStyle = 'rgba(255,255,255,0.38)';
+  ctx.font      = '11px monospace';
+  ctx.fillText('← → move  |  SPACE / tap = lightsaber slash', GW / 2, GH - 16);
+}
+
+// ─── Game-over screen ─────────────────────────────────────────────────────────
+function drawGameOver() {
+  ctx.fillStyle = 'rgba(0,0,20,0.78)';
+  ctx.fillRect(0, 0, GW, GH);
+
+  ctx.shadowColor = '#ff3333'; ctx.shadowBlur = 28;
+  ctx.fillStyle   = '#ff4444';
+  ctx.font        = 'bold 46px monospace';
+  ctx.textAlign   = 'center';
+  ctx.fillText('GAME OVER', GW / 2, 188);
+  ctx.shadowBlur  = 0;
+
+  ctx.fillStyle = '#fff';
+  ctx.font      = 'bold 26px monospace';
+  ctx.fillText('Score: ' + score, GW / 2, 250);
+
+  if (score > 0 && score >= highScore) {
+    ctx.fillStyle   = '#ffcc44';
+    ctx.font        = 'bold 15px monospace';
+    ctx.shadowColor = '#ffcc44'; ctx.shadowBlur = 12;
+    ctx.fillText('★ NEW HIGH SCORE! ★', GW / 2, 283);
+    ctx.shadowBlur  = 0;
+  }
+
+  ctx.fillStyle = '#aaa'; ctx.font = '16px monospace';
+  ctx.fillText('Best: ' + highScore, GW / 2, 315);
+  ctx.fillStyle = '#ff9944';
+  ctx.fillText('Enemies slain: ' + kills, GW / 2, 344);
+
+  // Play again
+  ctx.fillStyle   = '#00bb55';
+  ctx.shadowColor = '#00ff88'; ctx.shadowBlur = 16;
+  ctx.beginPath(); ctx.roundRect(GW / 2 - 92, 375, 184, 54, 13); ctx.fill();
+  ctx.shadowBlur  = 0;
+  ctx.fillStyle   = '#fff'; ctx.font = 'bold 21px monospace';
+  ctx.fillText('PLAY AGAIN', GW / 2, 408);
+
+  // Menu
+  ctx.fillStyle   = 'rgba(255,255,255,0.1)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(GW / 2 - 72, 442, 144, 46, 10); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#ddd'; ctx.font = '18px monospace';
+  ctx.fillText('MENU', GW / 2, 470);
+}
+
+// ─── Main draw ───────────────────────────────────────────────────────────────
+function draw() {
+  ctx.clearRect(0, 0, GW, GH);
+
+  if (state === S.MENU) { drawMenu(); return; }
+
+  drawBG();
+  for (const p of platforms) drawPlatform(p);
+  drawParticles();
+  drawEnemies();
+  drawYoda();
+  drawScorePopups();
+  drawHUD();
+  if (state === S.GAMEOVER) drawGameOver();
+}
+
+// ─── Loop ────────────────────────────────────────────────────────────────────
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

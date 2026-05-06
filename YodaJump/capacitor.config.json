@@ -1,0 +1,12 @@
+{
+  "appId": "com.yodajump.game",
+  "appName": "Yoda Jump",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#000000"
+  }
+}
