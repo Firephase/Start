@@ -7,1555 +7,1501 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
-:root {
-  --grad-a: #0a0a2e;
-  --grad-b: #1a0a4e;
-  --grad-c: #0d1a3d;
-  --accent: #7c3aed;
-  --accent2: #06b6d4;
-  --glass-bg: rgba(255,255,255,0.04);
-  --glass-border: rgba(255,255,255,0.10);
-  --glass-blur: blur(18px);
-  --text: #e2e8f0;
-  --text-dim: #94a3b8;
-  --msg-a: rgba(124,58,237,0.25);
-  --msg-b: rgba(6,182,212,0.18);
-  --radius: 20px;
-  --radius-sm: 12px;
-}
-
+/* ════ RESET & VARS ════ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-html, body {
-  height: 100%;
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  color: var(--text);
-  overflow: hidden;
+:root {
+  --ga: #050515; --gb: #10042e; --gc: #0d1a3d;
+  --accent: #7c3aed; --accent2: #06b6d4;
+  --glass: rgba(255,255,255,0.04);
+  --gborder: rgba(255,255,255,0.09);
+  --text: #e2e8f0; --dim: #94a3b8;
+  --r: 20px; --rs: 12px;
+  --green: #22c55e; --yellow: #fbbf24; --red: #f87171; --purple: #c084fc;
 }
+html, body { height: 100%; font-family: 'Segoe UI', system-ui, sans-serif; color: var(--text); overflow: hidden; }
 
-/* ── ANIMATED GRADIENT BG ── */
+/* ════ BACKGROUND ════ */
 #bg {
   position: fixed; inset: 0; z-index: 0;
-  background: linear-gradient(135deg, var(--grad-a), var(--grad-b), var(--grad-c));
-  animation: bgShift 20s ease infinite alternate;
+  background: linear-gradient(135deg, var(--ga), var(--gb), var(--gc));
+  animation: bgPulse 25s ease infinite alternate;
 }
+#bg::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse 60% 60% at 20% 80%, rgba(124,58,237,.15) 0%, transparent 70%),
+              radial-gradient(ellipse 50% 50% at 80% 15%, rgba(6,182,212,.10) 0%, transparent 70%);
+}
+/* Floating particles */
 #bg::after {
-  content: '';
-  position: absolute; inset: 0;
-  background: radial-gradient(ellipse at 20% 80%, rgba(124,58,237,0.18) 0%, transparent 60%),
-              radial-gradient(ellipse at 80% 20%, rgba(6,182,212,0.12) 0%, transparent 60%),
-              radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0.3) 0%, transparent 80%);
+  content: ''; position: absolute; inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 60% 70%, rgba(255,255,255,.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 80% 20%, rgba(255,255,255,.35) 0%, transparent 100%),
+    radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,.25) 0%, transparent 100%),
+    radial-gradient(1px 1px at 90% 50%, rgba(255,255,255,.3) 0%, transparent 100%);
+  animation: particleDrift 30s linear infinite;
 }
-@keyframes bgShift {
-  0%   { filter: hue-rotate(0deg) brightness(1); }
-  50%  { filter: hue-rotate(20deg) brightness(1.05); }
-  100% { filter: hue-rotate(-15deg) brightness(0.95); }
-}
+@keyframes bgPulse { 0%{filter:hue-rotate(0deg) brightness(1)} 50%{filter:hue-rotate(18deg) brightness(1.06)} 100%{filter:hue-rotate(-12deg) brightness(.94)} }
+@keyframes particleDrift { 0%{transform:translateY(0)} 100%{transform:translateY(-20px)} }
 
-/* ── GLASS CARD ── */
+/* ════ GLASS ════ */
 .glass {
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius);
+  background: var(--glass);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--gborder); border-radius: var(--r);
 }
 
-/* ── SCROLLBAR ── */
-::-webkit-scrollbar { width: 5px; }
+/* ════ SCROLLBAR ════ */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: rgba(124,58,237,.4); border-radius: 99px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(124,58,237,0.4); border-radius: 99px; }
 
 /* ════════════════════════════════════════
-   AUTH OVERLAY
+   AUTH
 ════════════════════════════════════════ */
 #auth-overlay {
-  position: fixed; inset: 0; z-index: 1000;
+  position: fixed; inset: 0; z-index: 900;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(6px);
+  background: rgba(0,0,0,.55); backdrop-filter: blur(8px);
 }
-.auth-card {
-  width: 380px;
-  padding: 40px 36px;
-  display: flex; flex-direction: column; gap: 20px;
+.auth-box {
+  width: 400px; padding: 44px 40px 36px;
+  display: flex; flex-direction: column; gap: 22px;
+  animation: popIn .35s cubic-bezier(.34,1.56,.64,1);
 }
-.auth-logo {
+@keyframes popIn { from{opacity:0;transform:scale(.88) translateY(20px)} to{opacity:1;transform:scale(1) translateY(0)} }
+.auth-brand {
   text-align: center;
-  font-size: 28px; font-weight: 700; letter-spacing: 1px;
-  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  font-size: 30px; font-weight: 800; letter-spacing: 1px;
+  background: linear-gradient(100deg, var(--accent), var(--accent2));
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
 }
-.auth-logo span { font-size: 13px; display: block; color: var(--text-dim); margin-top: 4px; -webkit-text-fill-color: var(--text-dim); }
-.auth-tabs { display: flex; gap: 8px; }
-.auth-tab {
+.auth-brand small { display: block; font-size: 12px; color: var(--dim); margin-top: 5px; -webkit-text-fill-color: var(--dim); letter-spacing: 2px; text-transform: uppercase; font-weight: 400; }
+.tab-row { display: flex; gap: 6px; padding: 4px; background: rgba(0,0,0,.2); border-radius: var(--rs); }
+.tab {
   flex: 1; padding: 9px; text-align: center; cursor: pointer;
-  border-radius: var(--radius-sm); border: 1px solid transparent;
-  font-size: 13px; font-weight: 600; transition: all .2s;
-  color: var(--text-dim);
+  border-radius: 9px; font-size: 13px; font-weight: 600;
+  color: var(--dim); transition: all .2s;
 }
-.auth-tab.active {
-  background: rgba(124,58,237,0.25);
-  border-color: rgba(124,58,237,0.5);
-  color: var(--text);
+.tab.on { background: rgba(124,58,237,.3); color: #c4b5fd; box-shadow: 0 0 0 1px rgba(124,58,237,.4); }
+.field {
+  display: flex; flex-direction: column; gap: 10px;
 }
-.auth-form { display: flex; flex-direction: column; gap: 12px; }
-.auth-form input {
-  padding: 12px 16px; border-radius: var(--radius-sm);
-  background: rgba(255,255,255,0.06); border: 1px solid var(--glass-border);
-  color: var(--text); font-size: 14px; outline: none; transition: border-color .2s;
+.field input {
+  padding: 13px 16px; border-radius: var(--rs);
+  background: rgba(255,255,255,.06); border: 1px solid var(--gborder);
+  color: var(--text); font-size: 14px; outline: none; transition: border-color .2s, box-shadow .2s;
 }
-.auth-form input:focus { border-color: rgba(124,58,237,0.6); }
-.auth-form input::placeholder { color: var(--text-dim); }
-.btn-primary {
-  padding: 12px; border-radius: var(--radius-sm);
+.field input:focus { border-color: rgba(124,58,237,.6); box-shadow: 0 0 0 3px rgba(124,58,237,.12); }
+.field input::placeholder { color: var(--dim); }
+.btn-auth {
+  padding: 13px; border-radius: var(--rs);
   background: linear-gradient(135deg, var(--accent), #5b21b6);
-  border: none; color: #fff; font-size: 14px; font-weight: 600;
-  cursor: pointer; transition: all .2s; letter-spacing: .5px;
+  border: none; color: #fff; font-size: 14px; font-weight: 700;
+  cursor: pointer; letter-spacing: .5px;
+  transition: filter .2s, transform .15s, box-shadow .2s;
+  box-shadow: 0 4px 20px rgba(124,58,237,.35);
 }
-.btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); }
-.auth-msg { font-size: 12px; color: #f87171; text-align: center; min-height: 16px; }
+.btn-auth:hover { filter: brightness(1.15); transform: translateY(-2px); box-shadow: 0 6px 28px rgba(124,58,237,.5); }
+.btn-auth:active { transform: translateY(0); }
+.auth-err { font-size: 12px; color: var(--red); text-align: center; min-height: 14px; }
 
 /* ════════════════════════════════════════
-   MAIN APP LAYOUT
+   APP SHELL
 ════════════════════════════════════════ */
-#app {
-  display: none;
-  position: fixed; inset: 0; z-index: 1;
-  flex-direction: column;
-  padding: 12px 14px 8px;
-  gap: 10px;
-}
-#app.visible { display: flex; }
+#app { display: none; position: fixed; inset: 0; z-index: 1; flex-direction: column; padding: 12px 14px 8px; gap: 9px; }
+#app.on { display: flex; }
 
-/* ── HEADER ── */
-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 20px; flex-shrink: 0;
-}
-.logo-text {
-  font-size: 20px; font-weight: 700; letter-spacing: 1.5px;
-  background: linear-gradient(90deg, var(--accent), var(--accent2));
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-}
-.logo-sub { font-size: 10px; color: var(--text-dim); letter-spacing: 2px; text-transform: uppercase; }
-.header-right { display: flex; align-items: center; gap: 12px; }
-.user-badge {
+/* ════ HEADER ════ */
+header { display: flex; align-items: center; justify-content: space-between; padding: 10px 22px; flex-shrink: 0; }
+.brand { font-size: 20px; font-weight: 800; letter-spacing: 1.5px; background: linear-gradient(100deg,var(--accent),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.brand-sub { font-size: 10px; color: var(--dim); letter-spacing: 2.5px; text-transform: uppercase; }
+.hdr-right { display: flex; align-items: center; gap: 10px; }
+.user-pill {
   display: flex; align-items: center; gap: 8px;
-  padding: 6px 14px; border-radius: 99px;
-  background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.3);
-  font-size: 13px;
+  padding: 6px 16px 6px 8px; border-radius: 99px;
+  background: rgba(124,58,237,.12); border: 1px solid rgba(124,58,237,.28);
+  font-size: 13px; font-weight: 500;
 }
-.user-avatar {
-  width: 26px; height: 26px; border-radius: 50%;
+.avatar {
+  width: 28px; height: 28px; border-radius: 50%;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
   display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 700;
+  font-size: 12px; font-weight: 800; flex-shrink: 0;
 }
-.btn-icon {
+.icon-btn {
   width: 36px; height: 36px; border-radius: 50%;
-  background: var(--glass-bg); border: 1px solid var(--glass-border);
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer; transition: all .2s; font-size: 15px;
+  background: var(--glass); border: 1px solid var(--gborder);
+  cursor: pointer; font-size: 15px; transition: all .2s; user-select: none;
 }
-.btn-icon:hover { background: rgba(255,255,255,0.1); transform: scale(1.08); }
+.icon-btn:hover { background: rgba(255,255,255,.1); transform: scale(1.1); }
 
-/* ── MAIN GRID ── */
-.main-grid {
-  flex: 1; display: grid;
-  grid-template-columns: 1fr 380px;
-  gap: 10px; min-height: 0;
-}
+/* ════ GRID ════ */
+.grid { flex: 1; display: grid; grid-template-columns: 1fr 370px; gap: 9px; min-height: 0; }
 
-/* ── CHAT PANEL ── */
-.chat-panel {
-  display: flex; flex-direction: column; gap: 0; min-height: 0;
-  overflow: hidden;
-}
-.chat-header {
-  padding: 14px 20px 10px;
+/* ════ CHAT PANEL ════ */
+.chat-pane { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.chat-head {
+  padding: 13px 20px 11px;
   display: flex; align-items: center; justify-content: space-between;
-  border-bottom: 1px solid var(--glass-border); flex-shrink: 0;
+  border-bottom: 1px solid var(--gborder); flex-shrink: 0;
 }
-.chat-header-title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px #22c55e; animation: pulse 2s infinite; }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-.chat-actions { display: flex; gap: 8px; }
-.btn-sm {
-  padding: 6px 14px; border-radius: 99px; font-size: 12px; font-weight: 600;
-  cursor: pointer; transition: all .2s; border: 1px solid transparent;
+.chat-title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 9px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: blink 2s infinite; }
+@keyframes blink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.85)} }
+.chat-btns { display: flex; gap: 7px; }
+.chip {
+  padding: 6px 13px; border-radius: 99px; font-size: 11px; font-weight: 700;
+  cursor: pointer; border: 1px solid transparent; transition: all .2s; user-select: none;
 }
-.btn-screenshot {
-  background: rgba(6,182,212,0.15); border-color: rgba(6,182,212,0.3); color: var(--accent2);
-}
-.btn-screenshot:hover { background: rgba(6,182,212,0.25); }
-.btn-gallery {
-  background: rgba(124,58,237,0.15); border-color: rgba(124,58,237,0.3); color: #a78bfa;
-}
-.btn-gallery:hover { background: rgba(124,58,237,0.25); }
-.btn-clear {
-  background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.25); color: #f87171;
-}
-.btn-clear:hover { background: rgba(248,113,113,0.2); }
+.chip-cyan  { background: rgba(6,182,212,.12);  border-color: rgba(6,182,212,.3);  color: var(--accent2); }
+.chip-cyan:hover  { background: rgba(6,182,212,.22); }
+.chip-violet{ background: rgba(124,58,237,.12); border-color: rgba(124,58,237,.3); color: #a78bfa; }
+.chip-violet:hover{ background: rgba(124,58,237,.22); }
+.chip-red   { background: rgba(248,113,113,.1); border-color: rgba(248,113,113,.25); color: var(--red); }
+.chip-red:hover   { background: rgba(248,113,113,.2); }
 
-/* ── MESSAGES ── */
-#chat-messages {
-  flex: 1; overflow-y: auto; padding: 16px 18px;
-  display: flex; flex-direction: column; gap: 16px;
-}
-.msg-block { display: flex; flex-direction: column; gap: 6px; max-width: 85%; }
-.msg-block.from-a { align-self: flex-end; align-items: flex-end; }
-.msg-block.from-b { align-self: flex-start; align-items: flex-start; }
-.msg-sender { font-size: 11px; font-weight: 600; color: var(--text-dim); letter-spacing: .5px; }
-.msg-bubble {
-  padding: 12px 16px; border-radius: 18px;
-  font-size: 13px; line-height: 1.5; word-break: break-word;
-  position: relative;
-}
-.from-a .msg-bubble {
-  background: var(--msg-a); border: 1px solid rgba(124,58,237,0.3);
-  border-bottom-right-radius: 4px;
-}
-.from-b .msg-bubble {
-  background: var(--msg-b); border: 1px solid rgba(6,182,212,0.25);
-  border-bottom-left-radius: 4px;
-}
-.msg-plain { color: var(--text); margin-bottom: 4px; }
-.msg-cipher {
-  font-family: 'Courier New', monospace; font-size: 11px;
-  color: #fbbf24; word-break: break-all; margin-top: 4px;
-  padding: 6px 8px; background: rgba(0,0,0,0.3); border-radius: 8px;
-}
-.msg-decrypted {
-  font-size: 11px; color: #86efac;
-  padding: 4px 8px; background: rgba(34,197,94,0.08); border-radius: 6px;
-  margin-top: 2px;
-}
-.msg-hash {
-  font-family: 'Courier New', monospace; font-size: 10px;
-  color: #c084fc; word-break: break-all;
-  padding: 4px 8px; background: rgba(124,58,237,0.1); border-radius: 6px; margin-top: 2px;
-}
-.msg-meta {
-  display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;
-}
-.meta-tag {
-  font-size: 10px; padding: 2px 8px; border-radius: 99px;
-  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
-  color: var(--text-dim); font-family: monospace;
-}
-.meta-tag.algo { color: var(--accent2); border-color: rgba(6,182,212,0.3); }
-.meta-tag.timing { color: #86efac; border-color: rgba(134,239,172,0.3); }
-.meta-tag.keylen { color: #fbbf24; border-color: rgba(251,191,36,0.3); }
-.msg-timestamp { font-size: 10px; color: var(--text-dim); padding: 0 4px; }
-.msg-label {
-  font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
-  color: var(--text-dim); margin-top: 2px;
-}
-.chat-empty {
+/* ════ MESSAGES ════ */
+#msgs { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+.empty-state {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 12px; color: var(--text-dim); text-align: center; padding: 40px;
+  gap: 14px; color: var(--dim); text-align: center; padding: 40px;
+  animation: fadeIn .4s ease;
 }
-.chat-empty .icon { font-size: 48px; opacity: .3; }
-.chat-empty p { font-size: 14px; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+.empty-icon { font-size: 52px; opacity: .25; }
+.empty-hint { font-size: 13px; line-height: 1.6; }
+.empty-steps {
+  display: flex; flex-direction: column; gap: 8px; margin-top: 8px;
+  text-align: left; font-size: 12px;
+}
+.step {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: 10px;
+  background: rgba(255,255,255,.04); border: 1px solid var(--gborder);
+}
+.step-num {
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  background: rgba(124,58,237,.3); display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800; color: #c4b5fd;
+}
 
-/* ── CRYPTO PANEL ── */
-.crypto-panel {
-  display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto;
+/* message bubble */
+.msg-wrap { display: flex; flex-direction: column; gap: 5px; max-width: 88%; animation: msgIn .3s cubic-bezier(.34,1.56,.64,1); }
+@keyframes msgIn { from{opacity:0;transform:translateY(12px) scale(.95)} to{opacity:1;transform:translateY(0) scale(1)} }
+.msg-wrap.a { align-self: flex-end; align-items: flex-end; }
+.msg-wrap.b { align-self: flex-start; align-items: flex-start; }
+.msg-who { font-size: 11px; font-weight: 700; color: var(--dim); letter-spacing: .5px; }
+.bubble {
+  padding: 12px 15px; border-radius: 18px; font-size: 13px; line-height: 1.5;
+  word-break: break-word; position: relative;
 }
-.panel-section { padding: 16px 18px; }
-.panel-section + .panel-section { margin-top: 0; }
-.section-title {
-  font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
-  color: var(--text-dim); margin-bottom: 12px; display: flex; align-items: center; gap: 6px;
+.msg-wrap.a .bubble { background: rgba(124,58,237,.22); border: 1px solid rgba(124,58,237,.32); border-bottom-right-radius: 4px; }
+.msg-wrap.b .bubble { background: rgba(6,182,212,.15); border: 1px solid rgba(6,182,212,.25); border-bottom-left-radius: 4px; }
+.msg-plain { color: var(--text); margin-bottom: 6px; font-size: 14px; }
+.sec-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); margin: 5px 0 2px; display: flex; align-items: center; gap: 6px; }
+.copy-inline {
+  cursor: pointer; font-size: 12px; opacity: .5; transition: opacity .2s;
+  padding: 1px 4px; border-radius: 4px;
 }
-.section-title::before { content: ''; width: 3px; height: 12px; background: var(--accent); border-radius: 2px; }
+.copy-inline:hover { opacity: 1; background: rgba(255,255,255,.1); }
+.mono-block {
+  font-family: 'Courier New', monospace; font-size: 10.5px;
+  word-break: break-all; padding: 7px 10px;
+  background: rgba(0,0,0,.35); border-radius: 8px; line-height: 1.5;
+}
+.cipher-text { color: var(--yellow); }
+.decrypt-text { color: #86efac; background: rgba(34,197,94,.07); }
+.hash-text { color: var(--purple); background: rgba(124,58,237,.1); }
+.key-text { color: var(--yellow); }
+.meta-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.tag {
+  font-size: 10px; padding: 2px 8px; border-radius: 99px;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1);
+  color: var(--dim); font-family: monospace;
+}
+.tag-algo { color: var(--accent2); border-color: rgba(6,182,212,.3); }
+.tag-time { color: #86efac; border-color: rgba(134,239,172,.3); }
+.tag-warn { color: var(--red); border-color: rgba(248,113,113,.3); }
+.msg-ts { font-size: 10px; color: var(--dim); padding: 0 4px; }
 
-/* Algorithm selector */
-.algo-grid { display: flex; flex-direction: column; gap: 6px; }
-.algo-btn {
-  padding: 10px 14px; border-radius: var(--radius-sm);
-  background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border);
-  color: var(--text); cursor: pointer; transition: all .2s;
-  display: flex; align-items: center; justify-content: space-between;
-  font-size: 13px; text-align: left;
+/* ════ CRYPTO PANEL ════ */
+.crypto-col { display: flex; flex-direction: column; gap: 9px; min-height: 0; overflow-y: auto; }
+.section { padding: 15px 17px; }
+.sec-head {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 1.8px;
+  color: var(--dim); margin-bottom: 11px;
+  display: flex; align-items: center; gap: 7px;
 }
-.algo-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(124,58,237,0.4); }
-.algo-btn.selected {
-  background: rgba(124,58,237,0.2); border-color: rgba(124,58,237,0.6);
-  color: #c4b5fd;
-}
-.algo-badge {
-  font-size: 10px; padding: 2px 7px; border-radius: 99px;
-  font-family: monospace; letter-spacing: .5px;
-}
-.badge-sym { background: rgba(6,182,212,0.2); color: var(--accent2); }
-.badge-asym { background: rgba(168,85,247,0.2); color: #c084fc; }
-.badge-hash { background: rgba(251,191,36,0.2); color: #fbbf24; }
+.sec-head::before { content:''; width:3px; height:12px; background:var(--accent); border-radius:2px; }
 
-/* Key section */
-.key-row { display: flex; gap: 8px; margin-bottom: 8px; }
-.key-input {
-  flex: 1; padding: 9px 12px; border-radius: var(--radius-sm);
-  background: rgba(0,0,0,0.25); border: 1px solid var(--glass-border);
-  color: #fbbf24; font-family: monospace; font-size: 11px; outline: none;
-  word-break: break-all; transition: border-color .2s;
-}
-.key-input:focus { border-color: rgba(251,191,36,0.5); }
-.btn-gen {
-  padding: 8px 12px; border-radius: var(--radius-sm);
-  background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.3);
-  color: #fbbf24; font-size: 12px; cursor: pointer; transition: all .2s; white-space: nowrap;
-}
-.btn-gen:hover { background: rgba(251,191,36,0.22); }
-.key-info { font-size: 11px; color: var(--text-dim); line-height: 1.5; }
-.key-info span { color: var(--text); font-family: monospace; }
-
-/* Message input */
-.msg-input-area textarea {
-  width: 100%; padding: 12px 14px; border-radius: var(--radius-sm);
-  background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);
-  color: var(--text); font-size: 13px; resize: none; outline: none;
-  transition: border-color .2s; line-height: 1.5; font-family: inherit;
-}
-.msg-input-area textarea:focus { border-color: rgba(124,58,237,0.5); }
-.msg-input-area textarea::placeholder { color: var(--text-dim); }
-.send-row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
-.sender-toggle {
-  display: flex; border-radius: var(--radius-sm); overflow: hidden;
-  border: 1px solid var(--glass-border);
-}
-.sender-btn {
-  padding: 8px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
-  background: transparent; border: none; color: var(--text-dim); transition: all .2s;
-}
-.sender-btn.active-a { background: rgba(124,58,237,0.3); color: #c4b5fd; }
-.sender-btn.active-b { background: rgba(6,182,212,0.25); color: var(--accent2); }
-.btn-send {
-  flex: 1; padding: 9px; border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, var(--accent), #5b21b6);
-  border: none; color: #fff; font-size: 13px; font-weight: 600;
+/* algo buttons */
+.algo-list { display: flex; flex-direction: column; gap: 5px; }
+.algo-row {
+  padding: 9px 13px; border-radius: var(--rs);
+  background: rgba(255,255,255,.03); border: 1px solid var(--gborder);
   cursor: pointer; transition: all .2s;
+  display: flex; align-items: center; justify-content: space-between;
+  user-select: none;
 }
-.btn-send:hover { filter: brightness(1.15); transform: translateY(-1px); }
-.btn-send:disabled { opacity: .4; cursor: not-allowed; transform: none; filter: none; }
+.algo-row:hover { background: rgba(255,255,255,.07); border-color: rgba(124,58,237,.35); }
+.algo-row.sel { background: rgba(124,58,237,.18); border-color: rgba(124,58,237,.55); }
+.algo-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.algo-desc { font-size: 10px; color: var(--dim); margin-top: 1px; }
+.badge {
+  font-size: 9px; padding: 2px 7px; border-radius: 99px;
+  font-family: monospace; font-weight: 700; letter-spacing: .5px; flex-shrink: 0;
+}
+.bs { background: rgba(6,182,212,.18); color: var(--accent2); }
+.ba { background: rgba(168,85,247,.18); color: var(--purple); }
+.bh { background: rgba(251,191,36,.18); color: var(--yellow); }
 
-/* ── MUSIC PLAYER ── */
-#music-player {
-  flex-shrink: 0; padding: 10px 20px;
-  display: flex; align-items: center; gap: 16px;
+/* key area */
+#key-area { display: flex; flex-direction: column; gap: 10px; }
+.key-card {
+  padding: 11px 13px; border-radius: var(--rs);
+  background: rgba(0,0,0,.25); border: 1px solid rgba(251,191,36,.18);
+}
+.key-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.key-card-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--yellow); font-weight: 700; }
+.key-card-actions { display: flex; gap: 6px; }
+.mini-btn {
+  padding: 3px 9px; border-radius: 99px; font-size: 10px; font-weight: 700;
+  cursor: pointer; border: 1px solid transparent; transition: all .2s;
+}
+.mini-gen { background: rgba(251,191,36,.12); border-color: rgba(251,191,36,.3); color: var(--yellow); }
+.mini-gen:hover { background: rgba(251,191,36,.22); }
+.mini-copy { background: rgba(6,182,212,.1); border-color: rgba(6,182,212,.25); color: var(--accent2); }
+.mini-copy:hover { background: rgba(6,182,212,.2); }
+.key-val { font-family: monospace; font-size: 10px; color: var(--yellow); word-break: break-all; line-height: 1.5; }
+.key-info-row { font-size: 11px; color: var(--dim); line-height: 1.6; }
+.key-info-row span { color: var(--text); font-family: monospace; }
+.status-ok { color: #86efac !important; }
+.status-no { color: var(--red) !important; }
+.big-btn {
+  width: 100%; padding: 11px; border-radius: var(--rs); font-size: 13px; font-weight: 700;
+  cursor: pointer; border: 1px solid transparent; transition: all .25s; letter-spacing: .3px;
+}
+.big-gen { background: rgba(251,191,36,.1); border-color: rgba(251,191,36,.3); color: var(--yellow); }
+.big-gen:hover { background: rgba(251,191,36,.2); transform: translateY(-1px); }
+.big-gen:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+/* message input */
+.msg-area textarea {
+  width: 100%; padding: 12px 14px; border-radius: var(--rs);
+  background: rgba(255,255,255,.05); border: 1px solid var(--gborder);
+  color: var(--text); font-size: 13px; resize: none; outline: none;
+  line-height: 1.55; font-family: inherit; transition: border-color .2s, box-shadow .2s;
+}
+.msg-area textarea:focus { border-color: rgba(124,58,237,.5); box-shadow: 0 0 0 3px rgba(124,58,237,.1); }
+.msg-area textarea::placeholder { color: var(--dim); }
+.char-count { font-size: 10px; color: var(--dim); text-align: right; margin-top: 3px; }
+.send-row { display: flex; gap: 8px; margin-top: 8px; align-items: stretch; }
+.sender-sw {
+  display: flex; border-radius: var(--rs); overflow: hidden;
+  border: 1px solid var(--gborder); flex-shrink: 0;
+}
+.sw-btn {
+  padding: 0 14px; font-size: 12px; font-weight: 700; cursor: pointer;
+  background: transparent; border: none; color: var(--dim); transition: all .2s;
+}
+.sw-btn.sa { background: rgba(124,58,237,.28); color: #c4b5fd; }
+.sw-btn.sb { background: rgba(6,182,212,.22); color: var(--accent2); }
+.btn-send {
+  flex: 1; padding: 10px; border-radius: var(--rs);
+  background: linear-gradient(135deg, var(--accent), #5b21b6);
+  border: none; color: #fff; font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: all .2s; box-shadow: 0 3px 16px rgba(124,58,237,.3);
+}
+.btn-send:hover { filter: brightness(1.15); transform: translateY(-1px); box-shadow: 0 5px 22px rgba(124,58,237,.45); }
+.btn-send:disabled { opacity: .35; cursor: not-allowed; transform: none; filter: none; box-shadow: none; }
+
+/* ════ MUSIC PLAYER ════ */
+#player { flex-shrink: 0; padding: 9px 18px; display: flex; align-items: center; gap: 14px; }
+.vis { display: flex; align-items: flex-end; gap: 2px; height: 28px; flex-shrink: 0; }
+.vbar {
+  width: 3px; min-height: 3px; border-radius: 2px;
+  background: linear-gradient(to top, var(--accent), var(--accent2));
+  transition: height .08s ease;
 }
 .track-info { flex: 1; min-width: 0; }
-.track-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.track-artist { font-size: 11px; color: var(--text-dim); }
-.player-controls { display: flex; align-items: center; gap: 10px; }
+.track-name { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track-sub { font-size: 11px; color: var(--dim); }
+.ctrl { display: flex; align-items: center; gap: 9px; }
 .ctrl-btn {
-  width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--glass-border);
-  background: var(--glass-bg); display: flex; align-items: center; justify-content: center;
-  cursor: pointer; transition: all .2s; font-size: 13px;
+  width: 31px; height: 31px; border-radius: 50%;
+  background: var(--glass); border: 1px solid var(--gborder);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 13px; transition: all .2s; user-select: none;
 }
-.ctrl-btn:hover { background: rgba(255,255,255,0.1); transform: scale(1.1); }
-.ctrl-btn.play-btn {
-  width: 40px; height: 40px; font-size: 16px;
+.ctrl-btn:hover { background: rgba(255,255,255,.1); transform: scale(1.1); }
+#play-btn {
+  width: 40px; height: 40px; font-size: 17px;
   background: linear-gradient(135deg, var(--accent), #5b21b6);
-  border: none;
+  border: none; box-shadow: 0 3px 14px rgba(124,58,237,.4);
 }
-.progress-bar {
-  flex: 1; height: 4px; background: rgba(255,255,255,0.1);
-  border-radius: 99px; cursor: pointer; position: relative; min-width: 80px;
+#play-btn:hover { filter: brightness(1.2); box-shadow: 0 4px 20px rgba(124,58,237,.55); }
+.prog-wrap { flex: 1; min-width: 60px; }
+.prog-bar {
+  height: 4px; background: rgba(255,255,255,.1);
+  border-radius: 99px; cursor: pointer; position: relative; overflow: hidden;
 }
-.progress-fill {
+.prog-fill {
   height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2));
-  border-radius: 99px; width: 0%; transition: width .5s linear;
+  border-radius: 99px; width: 0%;
+  transition: width .35s linear;
 }
-.volume-row { display: flex; align-items: center; gap: 8px; }
-.vol-icon { font-size: 14px; color: var(--text-dim); }
-input[type=range].vol-slider {
-  width: 70px; -webkit-appearance: none; height: 3px;
-  background: rgba(255,255,255,0.15); border-radius: 99px; outline: none; cursor: pointer;
+.prog-time { font-size: 10px; color: var(--dim); margin-top: 3px; display: flex; justify-content: space-between; }
+.vol-row { display: flex; align-items: center; gap: 7px; }
+.vol-ico { font-size: 14px; cursor: pointer; }
+input.vol {
+  width: 68px; -webkit-appearance: none; height: 3px;
+  background: rgba(255,255,255,.15); border-radius: 99px;
+  outline: none; cursor: pointer;
 }
-input[type=range].vol-slider::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
-  background: var(--accent); cursor: pointer;
-}
-.btn-download-track {
-  padding: 7px 14px; border-radius: 99px; font-size: 12px; font-weight: 600;
-  background: rgba(6,182,212,0.12); border: 1px solid rgba(6,182,212,0.3);
+input.vol::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+.dl-btn {
+  padding: 7px 13px; border-radius: 99px; font-size: 11px; font-weight: 700;
+  background: rgba(6,182,212,.1); border: 1px solid rgba(6,182,212,.28);
   color: var(--accent2); cursor: pointer; transition: all .2s; white-space: nowrap;
 }
-.btn-download-track:hover { background: rgba(6,182,212,0.22); }
-.visualizer { display: flex; align-items: flex-end; gap: 2px; height: 24px; }
-.vis-bar {
-  width: 3px; background: linear-gradient(to top, var(--accent), var(--accent2));
-  border-radius: 2px; animation: visPulse 1s ease-in-out infinite;
-  min-height: 3px;
-}
-@keyframes visPulse {
-  0%,100% { transform: scaleY(1); }
-  50% { transform: scaleY(var(--h,1)); }
-}
+.dl-btn:hover { background: rgba(6,182,212,.2); }
 
-/* ════════════════════════════════════════
-   GALLERY MODAL
-════════════════════════════════════════ */
-#gallery-modal {
+/* ════ GALLERY ════ */
+#gallery {
   display: none; position: fixed; inset: 0; z-index: 500;
-  background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
+  background: rgba(0,0,0,.72); backdrop-filter: blur(10px);
   align-items: center; justify-content: center;
 }
-#gallery-modal.open { display: flex; }
-.gallery-card {
-  width: min(900px, 95vw); max-height: 85vh;
-  display: flex; flex-direction: column; padding: 24px;
-  gap: 16px;
+#gallery.on { display: flex; }
+.gallery-box {
+  width: min(920px, 95vw); max-height: 86vh;
+  display: flex; flex-direction: column; padding: 24px; gap: 16px;
+  animation: popIn .3s ease;
 }
-.gallery-header { display: flex; align-items: center; justify-content: space-between; }
-.gallery-title { font-size: 18px; font-weight: 700; }
-.btn-close {
+.gal-head { display: flex; align-items: center; justify-content: space-between; }
+.gal-title { font-size: 18px; font-weight: 800; }
+.close-btn {
   width: 34px; height: 34px; border-radius: 50%;
-  background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.25);
-  color: #f87171; font-size: 18px; cursor: pointer; display: flex;
-  align-items: center; justify-content: center; transition: all .2s;
+  background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.25);
+  color: var(--red); font-size: 18px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: all .2s;
 }
-.btn-close:hover { background: rgba(248,113,113,0.2); }
-.gallery-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px; overflow-y: auto; padding-right: 4px;
+.close-btn:hover { background: rgba(248,113,113,.22); }
+.gal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px,1fr)); gap: 12px; overflow-y: auto; }
+.gal-item {
+  border-radius: var(--rs); overflow: hidden;
+  border: 1px solid var(--gborder); transition: all .2s;
+  background: rgba(0,0,0,.25); position: relative;
+  cursor: pointer;
 }
-.gallery-item {
-  border-radius: var(--radius-sm); overflow: hidden;
-  border: 1px solid var(--glass-border); cursor: pointer;
-  transition: all .2s; background: rgba(0,0,0,0.2);
-}
-.gallery-item:hover { transform: scale(1.03); border-color: rgba(124,58,237,0.5); }
-.gallery-item img { width: 100%; display: block; }
-.gallery-item-caption {
-  padding: 8px 10px; font-size: 11px; color: var(--text-dim);
-  border-top: 1px solid var(--glass-border);
+.gal-item:hover { transform: scale(1.03); border-color: rgba(124,58,237,.5); }
+.gal-item:hover .gal-del { opacity: 1; }
+.gal-img { width: 100%; display: block; pointer-events: none; }
+.gal-cap {
+  padding: 7px 10px; font-size: 10px; color: var(--dim);
+  border-top: 1px solid var(--gborder);
   display: flex; justify-content: space-between; align-items: center;
 }
-.btn-dl-img {
-  font-size: 14px; cursor: pointer; transition: color .2s;
-  color: var(--text-dim);
+.gal-dl { font-size: 14px; cursor: pointer; color: var(--dim); transition: color .2s; }
+.gal-dl:hover { color: var(--accent2); }
+.gal-del {
+  position: absolute; top: 6px; right: 6px;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: rgba(248,113,113,.8); color: #fff; font-size: 12px;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .2s; cursor: pointer;
+  border: 1px solid rgba(255,255,255,.2);
 }
-.btn-dl-img:hover { color: var(--accent2); }
-.gallery-empty { text-align: center; color: var(--text-dim); padding: 40px; font-size: 14px; }
+.gal-del:hover { background: var(--red); }
+.gal-empty { text-align: center; color: var(--dim); padding: 50px; font-size: 14px; }
 
-/* ════════════════════════════════════════
-   LIGHTBOX
-════════════════════════════════════════ */
+/* ════ LIGHTBOX ════ */
 #lightbox {
   display: none; position: fixed; inset: 0; z-index: 600;
-  background: rgba(0,0,0,0.9); backdrop-filter: blur(4px);
+  background: rgba(0,0,0,.92); backdrop-filter: blur(6px);
   align-items: center; justify-content: center; cursor: zoom-out;
 }
-#lightbox.open { display: flex; }
-#lightbox img { max-width: 90vw; max-height: 90vh; border-radius: var(--radius); box-shadow: 0 0 60px rgba(124,58,237,0.4); }
+#lightbox.on { display: flex; }
+#lightbox img { max-width: 90vw; max-height: 90vh; border-radius: var(--r); box-shadow: 0 0 80px rgba(124,58,237,.45); animation: popIn .25s ease; }
 
-/* ════════════════════════════════════════
-   TOAST
-════════════════════════════════════════ */
+/* ════ TOAST ════ */
 #toast {
-  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px);
-  z-index: 900; padding: 10px 22px; border-radius: 99px;
-  background: rgba(22,22,44,0.95); border: 1px solid rgba(124,58,237,0.4);
+  position: fixed; bottom: 88px; left: 50%; transform: translateX(-50%) translateY(16px);
+  z-index: 800; padding: 10px 22px; border-radius: 99px;
+  background: rgba(15,15,35,.96); border: 1px solid rgba(124,58,237,.35);
   color: var(--text); font-size: 13px; font-weight: 500;
-  opacity: 0; transition: all .3s; pointer-events: none; white-space: nowrap;
+  opacity: 0; transition: all .28s; pointer-events: none; white-space: nowrap;
+  box-shadow: 0 4px 24px rgba(0,0,0,.5);
 }
-#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-/* ════════════════════════════════════════
-   LOADING SPINNER
-════════════════════════════════════════ */
-.spinner {
-  width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.2);
-  border-top-color: #fff; border-radius: 50%;
-  animation: spin .6s linear infinite; display: inline-block;
+/* ════ SPINNER ════ */
+.spin { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: rot .5s linear infinite; display: inline-block; vertical-align: middle; }
+@keyframes rot { to{transform:rotate(360deg)} }
+
+/* ════ ALGO INFO MODAL ════ */
+#algo-info {
+  display: none; position: fixed; inset: 0; z-index: 550;
+  background: rgba(0,0,0,.68); backdrop-filter: blur(8px);
+  align-items: center; justify-content: center;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
+#algo-info.on { display: flex; }
+.info-box { width: min(500px, 92vw); padding: 28px; display: flex; flex-direction: column; gap: 16px; animation: popIn .3s ease; }
+.info-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.info-title { font-size: 20px; font-weight: 800; }
+.info-body { font-size: 13px; color: var(--dim); line-height: 1.7; }
+.info-props { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.info-prop { padding: 10px 12px; border-radius: var(--rs); background: rgba(255,255,255,.04); border: 1px solid var(--gborder); }
+.info-prop-k { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--dim); }
+.info-prop-v { font-size: 13px; font-weight: 600; margin-top: 2px; font-family: monospace; color: var(--accent2); }
 </style>
 </head>
 <body>
-
-<!-- BACKGROUND -->
 <div id="bg"></div>
 
-<!-- AUTH -->
+<!-- ════ AUTH ════ -->
 <div id="auth-overlay">
-  <div class="glass auth-card">
-    <div class="auth-logo">🔐 CryptChat<span>Encryption Laboratory v1.0</span></div>
-    <div class="auth-tabs">
-      <div class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Sign In</div>
-      <div class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Register</div>
+  <div class="glass auth-box">
+    <div class="auth-brand">🔐 CryptChat <small>Encryption Laboratory v2.0</small></div>
+    <div class="tab-row">
+      <div class="tab on" id="t-login" onclick="authTab('login')">Sign In</div>
+      <div class="tab" id="t-reg" onclick="authTab('reg')">Register</div>
     </div>
-    <form class="auth-form" onsubmit="handleAuth(event)">
-      <input type="text" id="auth-user" placeholder="Username" autocomplete="username" required>
-      <input type="password" id="auth-pass" placeholder="Password" autocomplete="current-password" required>
-      <input type="password" id="auth-pass2" placeholder="Confirm password" autocomplete="new-password" style="display:none">
-      <button type="submit" class="btn-primary" id="auth-btn">Sign In</button>
+    <form class="field" onsubmit="doAuth(event)">
+      <input id="a-user" type="text" placeholder="Username" autocomplete="username" required>
+      <input id="a-pass" type="password" placeholder="Password" autocomplete="current-password" required>
+      <input id="a-pass2" type="password" placeholder="Confirm password" style="display:none">
+      <button type="submit" class="btn-auth" id="a-btn">Sign In</button>
     </form>
-    <div class="auth-msg" id="auth-msg"></div>
+    <div class="auth-err" id="a-err"></div>
   </div>
 </div>
 
-<!-- MAIN APP -->
+<!-- ════ APP ════ -->
 <div id="app">
-
-  <!-- HEADER -->
   <header class="glass">
-    <div>
-      <div class="logo-text">🔐 CryptChat</div>
-      <div class="logo-sub">Encryption Laboratory</div>
-    </div>
-    <div class="header-right">
-      <div class="user-badge">
-        <div class="user-avatar" id="user-avatar-hdr"></div>
-        <span id="user-name-hdr"></span>
+    <div><div class="brand">🔐 CryptChat</div><div class="brand-sub">Encryption Laboratory</div></div>
+    <div class="hdr-right">
+      <div class="user-pill">
+        <div class="avatar" id="av"></div>
+        <span id="uname"></span>
       </div>
-      <div class="btn-icon" title="Gallery" onclick="openGallery()">🖼️</div>
-      <div class="btn-icon" title="Sign Out" onclick="logout()">🚪</div>
+      <div class="icon-btn" title="Screenshot Gallery" onclick="openGallery()">🖼️</div>
+      <div class="icon-btn" title="Sign Out" onclick="doLogout()">🚪</div>
     </div>
   </header>
 
-  <!-- MAIN GRID -->
-  <div class="main-grid" style="flex:1;min-height:0;">
-
-    <!-- CHAT PANEL -->
-    <div class="glass chat-panel">
-      <div class="chat-header">
-        <div class="chat-header-title">
-          <div class="status-dot"></div>
-          Secure Channel: Alice → Bob
-        </div>
-        <div class="chat-actions">
-          <button class="btn-sm btn-screenshot" onclick="takeScreenshot()">📸 Screenshot</button>
-          <button class="btn-sm btn-gallery" onclick="openGallery()">🖼️ Gallery</button>
-          <button class="btn-sm btn-clear" onclick="clearChat()">🗑️ Clear</button>
+  <div class="grid">
+    <!-- CHAT -->
+    <div class="glass chat-pane">
+      <div class="chat-head">
+        <div class="chat-title"><div class="live-dot"></div>Secure Channel · Alice ↔ Bob</div>
+        <div class="chat-btns">
+          <div class="chip chip-cyan" onclick="doScreenshot()">📸 Screenshot</div>
+          <div class="chip chip-violet" onclick="openGallery()">🖼️ Gallery</div>
+          <div class="chip chip-red" onclick="clearChat()">🗑 Clear</div>
         </div>
       </div>
-      <div id="chat-messages">
-        <div class="chat-empty" id="chat-empty">
-          <div class="icon">🔒</div>
-          <p>Select an algorithm, generate a key,<br>and start encrypting messages.</p>
+      <div id="msgs">
+        <div class="empty-state" id="empty">
+          <div class="empty-icon">🔒</div>
+          <div class="empty-hint">Virtual encrypted chat between Alice and Bob.<br>All crypto runs locally in your browser.</div>
+          <div class="empty-steps">
+            <div class="step"><div class="step-num">1</div>Choose an algorithm on the right</div>
+            <div class="step"><div class="step-num">2</div>Key is auto-generated — or click ⚙ Gen</div>
+            <div class="step"><div class="step-num">3</div>Type a message and press Encrypt & Send</div>
+            <div class="step"><div class="step-num">4</div>See plaintext → ciphertext → decrypted</div>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- CRYPTO PANEL -->
-    <div class="crypto-panel">
-
-      <!-- ALGORITHM SELECTOR -->
-      <div class="glass panel-section">
-        <div class="section-title">Algorithm</div>
-        <div class="algo-grid" id="algo-grid"></div>
+    <!-- CRYPTO CONTROLS -->
+    <div class="crypto-col">
+      <!-- Algorithm picker -->
+      <div class="glass section">
+        <div class="sec-head">Algorithm <span style="margin-left:auto;font-size:10px;cursor:pointer;color:var(--accent2);" onclick="openAlgoInfo()">ℹ Info</span></div>
+        <div class="algo-list" id="algo-list"></div>
       </div>
 
-      <!-- KEY / PARAMS -->
-      <div class="glass panel-section" id="key-section">
-        <div class="section-title">Key & Parameters</div>
-        <div id="key-controls"></div>
+      <!-- Key section -->
+      <div class="glass section">
+        <div class="sec-head">Key & Parameters</div>
+        <div id="key-area"></div>
       </div>
 
-      <!-- MESSAGE INPUT -->
-      <div class="glass panel-section">
-        <div class="section-title">Message</div>
-        <div class="msg-input-area">
-          <textarea id="msg-input" rows="3" placeholder="Type your message here..."></textarea>
+      <!-- Message input -->
+      <div class="glass section">
+        <div class="sec-head">Message</div>
+        <div class="msg-area">
+          <textarea id="msg-in" rows="3" placeholder="Type your message… (Ctrl+Enter to send)" oninput="updateCharCount()"></textarea>
+          <div class="char-count"><span id="char-cnt">0</span> chars</div>
         </div>
         <div class="send-row">
-          <div class="sender-toggle">
-            <button class="sender-btn active-a" id="sender-a-btn" onclick="setSender('A')">Alice</button>
-            <button class="sender-btn" id="sender-b-btn" onclick="setSender('B')">Bob</button>
+          <div class="sender-sw">
+            <button class="sw-btn sa" id="sw-a" onclick="setSender('A')">Alice</button>
+            <button class="sw-btn" id="sw-b" onclick="setSender('B')">Bob</button>
           </div>
-          <button class="btn-send" id="send-btn" onclick="sendMessage()">
-            Encrypt & Send
-          </button>
+          <button class="btn-send" id="send-btn" onclick="sendMsg()">Encrypt &amp; Send</button>
         </div>
       </div>
-
     </div>
   </div>
 
   <!-- MUSIC PLAYER -->
-  <div class="glass" id="music-player">
-    <div class="visualizer" id="visualizer">
-      <div class="vis-bar" style="--h:2; height:8px;"></div>
-      <div class="vis-bar" style="--h:3; height:12px; animation-delay:.1s"></div>
-      <div class="vis-bar" style="--h:4; height:6px; animation-delay:.2s"></div>
-      <div class="vis-bar" style="--h:2; height:14px; animation-delay:.3s"></div>
-      <div class="vis-bar" style="--h:5; height:5px; animation-delay:.15s"></div>
-      <div class="vis-bar" style="--h:3; height:10px; animation-delay:.05s"></div>
+  <div class="glass" id="player">
+    <div class="vis" id="vis">
+      <div class="vbar" style="height:4px"></div>
+      <div class="vbar" style="height:8px"></div>
+      <div class="vbar" style="height:12px"></div>
+      <div class="vbar" style="height:7px"></div>
+      <div class="vbar" style="height:5px"></div>
+      <div class="vbar" style="height:10px"></div>
+      <div class="vbar" style="height:14px"></div>
+      <div class="vbar" style="height:6px"></div>
     </div>
     <div class="track-info">
-      <div class="track-name" id="track-name">Select a track to play</div>
-      <div class="track-artist" id="track-artist">Generated Dark Ambient · Web Audio API</div>
+      <div class="track-name" id="t-name">— Select a track —</div>
+      <div class="track-sub" id="t-sub">Dark Ambient · Synthesized · Web Audio API</div>
     </div>
-    <div class="player-controls">
+    <div class="ctrl">
       <div class="ctrl-btn" onclick="prevTrack()" title="Previous">⏮</div>
-      <div class="ctrl-btn play-btn" id="play-btn" onclick="togglePlay()" title="Play/Pause">▶</div>
+      <div class="ctrl-btn" id="play-btn" onclick="togglePlay()" title="Play / Pause">▶</div>
       <div class="ctrl-btn" onclick="nextTrack()" title="Next">⏭</div>
     </div>
-    <div class="progress-bar" id="progress-bar" onclick="seekTrack(event)">
-      <div class="progress-fill" id="progress-fill"></div>
+    <div class="prog-wrap">
+      <div class="prog-bar" id="prog" onclick="seekTo(event)"><div class="prog-fill" id="pfill"></div></div>
+      <div class="prog-time"><span id="pt-cur">0:00</span><span id="pt-dur">2:00</span></div>
     </div>
-    <div class="volume-row">
-      <span class="vol-icon">🔊</span>
-      <input type="range" class="vol-slider" id="vol-slider" min="0" max="100" value="40" oninput="setVolume(this.value)">
+    <div class="vol-row">
+      <span class="vol-ico" onclick="toggleMute()">🔊</span>
+      <input type="range" class="vol" id="vol" min="0" max="100" value="40" oninput="setVol(this.value)">
     </div>
-    <button class="btn-download-track" onclick="downloadTrack()">⬇ Save Track</button>
+    <button class="dl-btn" onclick="dlTrack()">⬇ Save WAV</button>
   </div>
-
 </div>
 
-<!-- GALLERY MODAL -->
-<div id="gallery-modal">
-  <div class="glass gallery-card">
-    <div class="gallery-header">
-      <div class="gallery-title">📸 Screenshot Gallery</div>
-      <button class="btn-close" onclick="closeGallery()">✕</button>
+<!-- GALLERY -->
+<div id="gallery">
+  <div class="glass gallery-box">
+    <div class="gal-head">
+      <div class="gal-title">📸 Screenshot Gallery</div>
+      <button class="close-btn" onclick="closeGallery()">✕</button>
     </div>
-    <div class="gallery-grid" id="gallery-grid"></div>
+    <div class="gal-grid" id="gal-grid"></div>
   </div>
 </div>
 
 <!-- LIGHTBOX -->
 <div id="lightbox" onclick="closeLightbox()">
-  <img id="lightbox-img" src="" alt="">
+  <img id="lb-img" src="" alt="">
+</div>
+
+<!-- ALGO INFO -->
+<div id="algo-info">
+  <div class="glass info-box">
+    <div class="info-head">
+      <div class="info-title" id="ii-title">AES-256-GCM</div>
+      <button class="close-btn" onclick="closeAlgoInfo()">✕</button>
+    </div>
+    <div class="info-body" id="ii-body"></div>
+    <div class="info-props" id="ii-props"></div>
+  </div>
 </div>
 
 <!-- TOAST -->
 <div id="toast"></div>
 
 <script>
-/* ════════════════════════════════════════════════════
-   GRADIENT PALETTES — random on each load
-════════════════════════════════════════════════════ */
-const PALETTES = [
-  { a:'#050515', b:'#10042e', c:'#0d1a3d', accent:'#7c3aed', accent2:'#06b6d4' },
-  { a:'#021a0d', b:'#031f1a', c:'#012a1a', accent:'#059669', accent2:'#10b981' },
-  { a:'#1a0505', b:'#2d0a0a', c:'#1a0a1a', accent:'#dc2626', accent2:'#f97316' },
-  { a:'#05121a', b:'#0a1a2d', c:'#05101f', accent:'#0ea5e9', accent2:'#38bdf8' },
-  { a:'#120520', b:'#1a0530', c:'#0d0a25', accent:'#9333ea', accent2:'#c084fc' },
-  { a:'#0d1a05', b:'#1a2d0a', c:'#0a1f05', accent:'#16a34a', accent2:'#4ade80' },
+'use strict';
+/* ══════════════════════════════════════════════════════════
+   PALETTE — random on each load
+══════════════════════════════════════════════════════════ */
+const PALS = [
+  {a:'#04051a',b:'#0e0329',c:'#081630', ac:'#7c3aed', a2:'#06b6d4'},
+  {a:'#011509',b:'#021c10',c:'#012515', ac:'#059669', a2:'#34d399'},
+  {a:'#180404',b:'#280606',c:'#180610', ac:'#dc2626', a2:'#f97316'},
+  {a:'#04101a',b:'#071726',c:'#040e1c', ac:'#0ea5e9', a2:'#38bdf8'},
+  {a:'#10041f',b:'#18042c',c:'#0c0820', ac:'#9333ea', a2:'#c084fc'},
+  {a:'#0b1504',b:'#172408',c:'#091b04', ac:'#16a34a', a2:'#4ade80'},
 ];
-const pal = PALETTES[Math.floor(Math.random() * PALETTES.length)];
-document.documentElement.style.setProperty('--grad-a', pal.a);
-document.documentElement.style.setProperty('--grad-b', pal.b);
-document.documentElement.style.setProperty('--grad-c', pal.c);
-document.documentElement.style.setProperty('--accent', pal.accent);
-document.documentElement.style.setProperty('--accent2', pal.accent2);
+const P = PALS[Math.floor(Math.random()*PALS.length)];
+const R = document.documentElement;
+R.style.setProperty('--ga', P.a);
+R.style.setProperty('--gb', P.b);
+R.style.setProperty('--gc', P.c);
+R.style.setProperty('--accent', P.ac);
+R.style.setProperty('--accent2', P.a2);
 
-/* ════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════
    AUTH
-════════════════════════════════════════════════════ */
-let authMode = 'login';
-let currentUser = null;
+══════════════════════════════════════════════════════════ */
+let authMode = 'login', CU = null;
 
-function switchAuthTab(mode) {
-  authMode = mode;
-  document.getElementById('tab-login').classList.toggle('active', mode === 'login');
-  document.getElementById('tab-register').classList.toggle('active', mode === 'register');
-  document.getElementById('auth-btn').textContent = mode === 'login' ? 'Sign In' : 'Create Account';
-  document.getElementById('auth-pass2').style.display = mode === 'register' ? 'block' : 'none';
-  document.getElementById('auth-msg').textContent = '';
+function authTab(m) {
+  authMode = m;
+  document.getElementById('t-login').classList.toggle('on', m==='login');
+  document.getElementById('t-reg').classList.toggle('on', m==='reg');
+  document.getElementById('a-btn').textContent = m==='login' ? 'Sign In' : 'Create Account';
+  document.getElementById('a-pass2').style.display = m==='reg' ? 'block' : 'none';
+  document.getElementById('a-err').textContent = '';
 }
 
-function hashPassword(pass) {
-  return CryptoJS.SHA256(pass + 'cryptchat_salt_2024').toString();
-}
+function hp(p) { return CryptoJS.SHA256('cc_s4lt::' + p).toString(); }
 
-function handleAuth(e) {
+function doAuth(e) {
   e.preventDefault();
-  const user = document.getElementById('auth-user').value.trim();
-  const pass = document.getElementById('auth-pass').value;
-  const pass2 = document.getElementById('auth-pass2').value;
-  const msg = document.getElementById('auth-msg');
+  const u = document.getElementById('a-user').value.trim();
+  const p = document.getElementById('a-pass').value;
+  const p2 = document.getElementById('a-pass2').value;
+  const err = id => document.getElementById('a-err').textContent = id;
 
-  if (!user || user.length < 2) { msg.textContent = 'Username must be at least 2 characters.'; return; }
-  if (pass.length < 4) { msg.textContent = 'Password must be at least 4 characters.'; return; }
+  if (u.length < 2) return err('Username must be ≥ 2 chars');
+  if (p.length < 4) return err('Password must be ≥ 4 chars');
 
-  const users = JSON.parse(localStorage.getItem('cc_users') || '{}');
+  const DB = JSON.parse(localStorage.getItem('cc_db') || '{}');
 
-  if (authMode === 'register') {
-    if (pass !== pass2) { msg.textContent = 'Passwords do not match.'; return; }
-    if (users[user]) { msg.textContent = 'Username already taken.'; return; }
-    users[user] = { hash: hashPassword(pass), gallery: [], settings: {} };
-    localStorage.setItem('cc_users', JSON.stringify(users));
-    toast('Account created! Welcome, ' + user);
+  if (authMode === 'reg') {
+    if (p !== p2) return err('Passwords do not match');
+    if (DB[u]) return err('Username taken');
+    DB[u] = { h: hp(p), gallery: [] };
+    localStorage.setItem('cc_db', JSON.stringify(DB));
+    toast('🎉 Account created! Welcome, ' + u);
   } else {
-    if (!users[user]) { msg.textContent = 'User not found.'; return; }
-    if (users[user].hash !== hashPassword(pass)) { msg.textContent = 'Wrong password.'; return; }
+    if (!DB[u]) return err('User not found');
+    if (DB[u].h !== hp(p)) return err('Wrong password');
   }
 
-  currentUser = user;
-  localStorage.setItem('cc_session', user);
+  CU = u;
+  localStorage.setItem('cc_sess', u);
   document.getElementById('auth-overlay').style.display = 'none';
-  document.getElementById('app').classList.add('visible');
-  document.getElementById('user-name-hdr').textContent = user;
-  document.getElementById('user-avatar-hdr').textContent = user[0].toUpperCase();
-  initMusic();
+  document.getElementById('app').classList.add('on');
+  document.getElementById('uname').textContent = u;
+  document.getElementById('av').textContent = u[0].toUpperCase();
+  initPlayer();
 }
 
-function logout() {
-  localStorage.removeItem('cc_session');
-  currentUser = null;
+function doLogout() {
+  stopTrack(); audioCtx && audioCtx.close();
+  localStorage.removeItem('cc_sess');
   location.reload();
 }
 
-// Auto-login from session
+// Auto-session restore
 (function() {
-  const sess = localStorage.getItem('cc_session');
-  const users = JSON.parse(localStorage.getItem('cc_users') || '{}');
-  if (sess && users[sess]) {
-    currentUser = sess;
+  const s = localStorage.getItem('cc_sess');
+  const DB = JSON.parse(localStorage.getItem('cc_db') || '{}');
+  if (s && DB[s]) {
+    CU = s;
     document.getElementById('auth-overlay').style.display = 'none';
-    document.getElementById('app').classList.add('visible');
-    document.getElementById('user-name-hdr').textContent = sess;
-    document.getElementById('user-avatar-hdr').textContent = sess[0].toUpperCase();
-    setTimeout(initMusic, 500);
+    document.getElementById('app').classList.add('on');
+    document.getElementById('uname').textContent = s;
+    document.getElementById('av').textContent = s[0].toUpperCase();
+    setTimeout(initPlayer, 300);
   }
 })();
 
-/* ════════════════════════════════════════════════════
-   ALGORITHMS CONFIG
-════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════
+   ALGORITHM DEFINITIONS
+══════════════════════════════════════════════════════════ */
 const ALGOS = [
-  { id:'aes-256-gcm', name:'AES-256-GCM', badge:'SYM', badgeClass:'badge-sym',
-    desc:'Authenticated encryption, 256-bit key, 96-bit IV' },
-  { id:'chacha20', name:'ChaCha20-Poly1305', badge:'SYM', badgeClass:'badge-sym',
-    desc:'Stream cipher, 256-bit key, 96-bit nonce' },
-  { id:'3des', name:'3DES-CBC', badge:'SYM', badgeClass:'badge-sym',
-    desc:'Triple DES, 168-bit key, CBC mode, legacy' },
-  { id:'rsa-oaep', name:'RSA-OAEP-2048', badge:'ASYM', badgeClass:'badge-asym',
-    desc:'Public-key encryption, 2048-bit, OAEP+SHA-256' },
-  { id:'ecdh-aes', name:'ECDH + AES-256', badge:'ASYM', badgeClass:'badge-asym',
-    desc:'P-256 key agreement + AES-GCM for encryption' },
-  { id:'sha-256', name:'SHA-256', badge:'HASH', badgeClass:'badge-hash',
-    desc:'256-bit digest, FIPS 180-4 standard' },
-  { id:'sha-3', name:'SHA-3-256', badge:'HASH', badgeClass:'badge-hash',
-    desc:'Keccak sponge, 256-bit, FIPS 202 standard' },
-  { id:'blake2b', name:'BLAKE2b-256', badge:'HASH', badgeClass:'badge-hash',
-    desc:'Fast cryptographic hash, 256-bit digest' },
+  { id:'aes-gcm',   name:'AES-256-GCM',          badge:'SYM', bc:'bs',
+    desc:'Industry standard authenticated encryption. 256-bit key, 96-bit IV, 128-bit auth tag. Used in TLS 1.3, Signal, WhatsApp.',
+    props:{Standard:'NIST FIPS 197','Key size':'256 bit','IV size':'96 bit','Auth tag':'128 bit',Mode:'GCM (AEAD)',Security:'IND-CCA2'} },
+  { id:'chacha20',  name:'ChaCha20-Poly1305',     badge:'SYM', bc:'bs',
+    desc:'Stream cipher by D.J. Bernstein. Preferred alternative to AES where hardware AES acceleration is unavailable. Used in TLS 1.3, WireGuard, SSH.',
+    props:{Standard:'RFC 8439','Key size':'256 bit','Nonce':'96 bit','MAC':'Poly1305','Type':'AEAD stream cipher',Author:'D.J. Bernstein'} },
+  { id:'3des',      name:'3DES-CBC',              badge:'SYM', bc:'bs',
+    desc:'Legacy 3× DES cipher. Deprecated by NIST in 2017. Shown here for historical comparison. Do NOT use in production.',
+    props:{Standard:'ANSI X9.52','Key size':'168 bit eff.','IV size':'64 bit',Mode:'CBC',Status:'⚠ Deprecated',Replaced:'By AES'} },
+  { id:'rsa',       name:'RSA-OAEP-2048',         badge:'ASYM', bc:'ba',
+    desc:'Public-key encryption based on integer factorization hardness. Bob encrypts with Alice\'s public key; only Alice\'s private key decrypts. Foundation of PKI/TLS.',
+    props:{Standard:'PKCS#1 v2.1','Key size':'2048 bit',Padding:'OAEP + SHA-256',Type:'Asymmetric',Security:'IND-CCA2','Key gen':'~2 sec'} },
+  { id:'ecdh',      name:'ECDH P-256 + AES-256',  badge:'ASYM', bc:'ba',
+    desc:'Elliptic Curve Diffie-Hellman key agreement on NIST P-256 curve. Alice & Bob derive a shared secret, then encrypt with AES-256-GCM. Used in TLS 1.3 key exchange.',
+    props:{Curve:'P-256 (secp256r1)','Key agreement':'ECDH',Cipher:'AES-256-GCM',Standard:'NIST SP 800-56A','Key size':'256-bit equiv.',Protocol:'Forward secrecy'} },
+  { id:'sha256',    name:'SHA-256',               badge:'HASH', bc:'bh',
+    desc:'SHA-2 family cryptographic hash. One-way: produces 256-bit digest. Used in Bitcoin, TLS certificates, git, password hashing (with salt+KDF).',
+    props:{Standard:'FIPS 180-4',Output:'256 bit',Block:'512 bit',Rounds:'64','Construction':'Merkle-Damgård',Security:'Collision: 2^128'} },
+  { id:'sha3',      name:'SHA-3-256 (Keccak)',    badge:'HASH', bc:'bh',
+    desc:'Winner of NIST hash competition 2012. Based on Keccak sponge construction — completely different design from SHA-2. Resistant to length extension attacks.',
+    props:{Standard:'FIPS 202',Output:'256 bit','State size':'1600 bit',Rounds:'24 (Keccak-f)','Construction':'Sponge',Winner:'NIST 2012'} },
+  { id:'blake2b',   name:'BLAKE2b-256',           badge:'HASH', bc:'bh',
+    desc:'Faster than MD5 yet more secure than SHA-3. Designed for speed in software. Used in libsodium, Argon2, ZFS, WireGuard.',
+    props:{Standard:'RFC 7693',Output:'256 bit','Max digest':'512 bit',Rounds:'12','Tree hashing':'Yes','Speed':'~1 GB/s'} },
 ];
 
-let selectedAlgo = 'aes-256-gcm';
-let currentSender = 'A';
-let cryptoKeys = {};
+/* ══════════════════════════════════════════════════════════
+   STATE
+══════════════════════════════════════════════════════════ */
+let selAlgo = 'aes-gcm';
+let sender = 'A';
+let KS = {};   // keystore
+let msgCount = 0;
 
-// Build algo grid
-const algoGrid = document.getElementById('algo-grid');
-ALGOS.forEach(a => {
-  const btn = document.createElement('div');
-  btn.className = 'algo-btn' + (a.id === selectedAlgo ? ' selected' : '');
-  btn.id = 'algo-' + a.id;
-  btn.innerHTML = `<span>${a.name}<br><small style="color:var(--text-dim);font-size:10px;">${a.desc}</small></span>
-    <span class="algo-badge ${a.badgeClass}">${a.badge}</span>`;
-  btn.onclick = () => selectAlgo(a.id);
-  algoGrid.appendChild(btn);
-});
+/* ══════════════════════════════════════════════════════════
+   BUILD ALGO LIST
+══════════════════════════════════════════════════════════ */
+(function() {
+  const list = document.getElementById('algo-list');
+  ALGOS.forEach(a => {
+    const d = document.createElement('div');
+    d.className = 'algo-row' + (a.id === selAlgo ? ' sel' : '');
+    d.id = 'ar-' + a.id;
+    d.innerHTML = `
+      <div>
+        <div class="algo-name">${a.name}</div>
+        <div class="algo-desc">${a.props[Object.keys(a.props)[0]]} · ${Object.keys(a.props)[1]}: ${Object.values(a.props)[1]}</div>
+      </div>
+      <span class="badge ${a.bc}">${a.badge}</span>`;
+    d.onclick = () => pickAlgo(a.id);
+    list.appendChild(d);
+  });
+})();
 
-function selectAlgo(id) {
-  selectedAlgo = id;
-  document.querySelectorAll('.algo-btn').forEach(b => b.classList.remove('selected'));
-  document.getElementById('algo-' + id).classList.add('selected');
-  renderKeyControls();
+/* ══════════════════════════════════════════════════════════
+   PICK ALGORITHM
+══════════════════════════════════════════════════════════ */
+async function pickAlgo(id) {
+  selAlgo = id;
+  document.querySelectorAll('.algo-row').forEach(r => r.classList.remove('sel'));
+  document.getElementById('ar-' + id).classList.add('sel');
+  renderKeys();
+
+  // Auto-generate key if not present
+  if (!['sha256','sha3','blake2b'].includes(id)) {
+    if (id === 'aes-gcm' && !KS['aes-gcm']) await genAES();
+    else if (id === 'chacha20' && !KS['chacha20']) genChaCha();
+    else if (id === '3des' && !KS['3des']) gen3DES();
+    else if (id === 'ecdh' && !KS['ecdh']) await genECDH();
+    // RSA not auto-gen (expensive)
+  }
 }
 
-/* ════════════════════════════════════════════════════
-   KEY CONTROLS RENDERING
-════════════════════════════════════════════════════ */
-function renderKeyControls() {
-  const kc = document.getElementById('key-controls');
-  const algo = ALGOS.find(a => a.id === selectedAlgo);
+/* ══════════════════════════════════════════════════════════
+   KEY CONTROLS RENDER
+══════════════════════════════════════════════════════════ */
+function renderKeys() {
+  const area = document.getElementById('key-area');
+  const a = ALGOS.find(x => x.id === selAlgo);
 
-  if (['sha-256','sha-3','blake2b'].includes(selectedAlgo)) {
-    kc.innerHTML = `<div class="key-info" style="padding:8px 0;">
-      Hash functions are <span>one-way</span> — no key required.<br>
-      Output: <span>256-bit digest</span> (hex-encoded).
-    </div>`;
+  if (['sha256','sha3','blake2b'].includes(selAlgo)) {
+    area.innerHTML = `
+      <div class="key-info-row">
+        Hash functions are <span>one-way</span> — no encryption key required.<br>
+        Input → deterministic <span>256-bit digest</span> (hex).<br>
+        Same input always produces <span>same hash</span>.
+      </div>`;
     return;
   }
 
-  if (selectedAlgo === 'rsa-oaep') {
-    const hasKey = cryptoKeys['rsa-oaep'];
-    kc.innerHTML = `
-      <div class="key-info" style="margin-bottom:10px;">
-        Algorithm: <span>RSA-OAEP</span> · Key size: <span>2048 bit</span><br>
-        Mode: <span>Public key encrypt / Private key decrypt</span><br>
-        Status: <span style="color:${hasKey?'#86efac':'#f87171'}">${hasKey?'✓ Keys ready':'⚠ No keys generated'}</span>
+  if (selAlgo === 'rsa') {
+    const ok = !!KS['rsa'];
+    area.innerHTML = `
+      <div class="key-info-row" style="margin-bottom:10px;">
+        Algorithm: <span>RSA-OAEP</span> · Key: <span>2048 bit</span><br>
+        Encrypt with: <span>Bob's public key</span><br>
+        Decrypt with: <span>Bob's private key</span><br>
+        Status: <span class="${ok?'status-ok':'status-no'}">${ok ? '✓ Key pair ready' : '⚠ No keys — generate first'}</span>
       </div>
-      <button class="btn-gen" onclick="generateRSAKeys()" style="width:100%">
-        ${hasKey ? '↻ Regenerate RSA-2048 Keys' : '⚙ Generate RSA-2048 Key Pair'}
+      <button class="big-btn big-gen" id="rsa-gen-btn" onclick="genRSA()">
+        ${ok ? '↻ Regenerate RSA-2048 Pair' : '⚙ Generate RSA-2048 Key Pair'}
       </button>
-      ${hasKey ? `<div class="key-info" style="margin-top:10px;">
-        Public key: <span style="word-break:break-all;font-size:10px">${cryptoKeys['rsa-pub-display']||''}</span>
+      ${ok ? `<div class="key-card" style="margin-top:10px;">
+        <div class="key-card-head">
+          <div class="key-card-title">PUBLIC KEY (excerpt)</div>
+          <div class="key-card-actions"><div class="mini-btn mini-copy" onclick="copyText(KS['rsa-pub-b64'])">Copy</div></div>
+        </div>
+        <div class="key-val" style="font-size:9px;">${KS['rsa-pub-b64'] ? KS['rsa-pub-b64'].slice(0,72)+'…' : ''}</div>
       </div>` : ''}`;
     return;
   }
 
-  if (selectedAlgo === 'ecdh-aes') {
-    const hasKey = cryptoKeys['ecdh-aes'];
-    kc.innerHTML = `
-      <div class="key-info" style="margin-bottom:10px;">
+  if (selAlgo === 'ecdh') {
+    const ok = !!KS['ecdh'];
+    area.innerHTML = `
+      <div class="key-info-row" style="margin-bottom:10px;">
         Protocol: <span>ECDH P-256</span> key exchange<br>
-        Derived cipher: <span>AES-256-GCM</span><br>
-        Status: <span style="color:${hasKey?'#86efac':'#f87171'}">${hasKey?'✓ Shared secret derived':'⚠ No keys'}</span>
+        Step 1: Alice & Bob generate EC keypairs<br>
+        Step 2: Derive <span>shared secret</span> via ECDH<br>
+        Step 3: Encrypt with <span>AES-256-GCM</span><br>
+        Status: <span class="${ok?'status-ok':'status-no'}">${ok ? '✓ Shared key derived' : '⚠ No keys'}</span>
       </div>
-      <button class="btn-gen" onclick="generateECDHKeys()" style="width:100%">
-        ${hasKey ? '↻ New ECDH Key Exchange' : '⚙ Generate ECDH + Derive Shared Key'}
+      <button class="big-btn big-gen" id="ecdh-gen-btn" onclick="genECDH()">
+        ${ok ? '↻ New ECDH Key Exchange' : '⚙ Generate ECDH + Derive Shared Key'}
       </button>
-      ${hasKey ? `<div class="key-info" style="margin-top:10px;">
-        Shared secret (HKDF): <span style="font-size:10px;word-break:break-all">${cryptoKeys['ecdh-display']||''}</span>
+      ${ok ? `<div class="key-card" style="margin-top:10px;">
+        <div class="key-card-head">
+          <div class="key-card-title">SHARED SECRET (HKDF)</div>
+          <div class="key-card-actions"><div class="mini-btn mini-copy" onclick="copyText(KS['ecdh-hex'])">Copy</div></div>
+        </div>
+        <div class="key-val">${KS['ecdh-hex'] ? KS['ecdh-hex'].slice(0,48)+'…' : ''}</div>
       </div>` : ''}`;
     return;
   }
 
   // Symmetric
-  const keyDisplay = cryptoKeys[selectedAlgo] ? cryptoKeys[selectedAlgo].display : '';
-  const keyBits = selectedAlgo === '3des' ? '168' : '256';
-  kc.innerHTML = `
-    <div class="key-row">
-      <input type="text" class="key-input" id="key-display" value="${keyDisplay}" placeholder="Generate or paste key (hex)" readonly>
-      <button class="btn-gen" onclick="generateSymKey()">⚙ Gen</button>
+  const bits = selAlgo === '3des' ? '168' : '256';
+  const keyHex = KS[selAlgo] ? KS[selAlgo].hex : '';
+  area.innerHTML = `
+    <div class="key-card">
+      <div class="key-card-head">
+        <div class="key-card-title">SECRET KEY · ${bits} BIT</div>
+        <div class="key-card-actions">
+          <div class="mini-btn mini-gen" onclick="${selAlgo==='aes-gcm'?'genAES':selAlgo==='chacha20'?'genChaCha':'gen3DES'}()">⚙ New</div>
+          <div class="mini-btn mini-copy" onclick="copyText('${keyHex}')">Copy</div>
+        </div>
+      </div>
+      <div class="key-val">${keyHex || '<span style="color:var(--dim);font-style:italic;">Generating…</span>'}</div>
     </div>
-    <div class="key-info">
-      Algorithm: <span>${algo.name}</span> · Key size: <span>${keyBits} bit</span><br>
-      ${selectedAlgo === 'aes-256-gcm' ? 'Mode: <span>GCM (authenticated)</span> · IV: <span>96 bit</span>' : ''}
-      ${selectedAlgo === 'chacha20' ? 'Type: <span>Stream cipher</span> · Nonce: <span>96 bit</span>' : ''}
-      ${selectedAlgo === '3des' ? 'Mode: <span>CBC</span> · IV: <span>64 bit</span> · <span style="color:#f87171">Legacy — not recommended</span>' : ''}
+    <div class="key-info-row">
+      Algorithm: <span>${a.name}</span><br>
+      ${selAlgo==='aes-gcm' ? 'Mode: <span>GCM (authenticated)</span> · IV: <span>96 bit random</span><br>Auth tag: <span>128 bit</span>' : ''}
+      ${selAlgo==='chacha20' ? 'Type: <span>stream cipher</span> · Nonce: <span>96 bit random</span><br>MAC: <span>Poly1305</span>' : ''}
+      ${selAlgo==='3des' ? 'Mode: <span>CBC</span> · Padding: <span>PKCS7</span><br><span style="color:var(--red)">⚠ Deprecated — educational only</span>' : ''}
     </div>`;
 }
+renderKeys();
 
-renderKeyControls();
-
-/* ════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════
    KEY GENERATION
-════════════════════════════════════════════════════ */
-async function generateSymKey() {
-  let key, display;
-  if (selectedAlgo === 'aes-256-gcm') {
-    const raw = crypto.getRandomValues(new Uint8Array(32));
-    key = await crypto.subtle.importKey('raw', raw, {name:'AES-GCM'}, true, ['encrypt','decrypt']);
-    display = buf2hex(raw);
-    cryptoKeys[selectedAlgo] = { key, raw, display };
-  } else if (selectedAlgo === 'chacha20') {
-    const raw = crypto.getRandomValues(new Uint8Array(32));
-    display = buf2hex(raw);
-    cryptoKeys[selectedAlgo] = { raw, display };
-  } else if (selectedAlgo === '3des') {
-    // 24 bytes = 192 bits (3DES uses 168 effective bits)
-    const raw = Array.from(crypto.getRandomValues(new Uint8Array(24))).map(b => String.fromCharCode(b)).join('');
-    display = buf2hex(new Uint8Array(raw.split('').map(c => c.charCodeAt(0))));
-    cryptoKeys[selectedAlgo] = { raw, display };
-  }
-  renderKeyControls();
-  toast('Key generated!');
+══════════════════════════════════════════════════════════ */
+async function genAES() {
+  const raw = crypto.getRandomValues(new Uint8Array(32));
+  const key = await crypto.subtle.importKey('raw', raw, {name:'AES-GCM'}, true, ['encrypt','decrypt']);
+  KS['aes-gcm'] = { key, raw, hex: b2h(raw) };
+  if (selAlgo === 'aes-gcm') renderKeys();
+  toast('✓ AES-256 key generated');
 }
 
-async function generateRSAKeys() {
-  const sendBtn = document.getElementById('send-btn');
-  sendBtn.disabled = true;
-  sendBtn.innerHTML = '<span class="spinner"></span> Generating...';
-  toast('Generating RSA-2048… (may take a few seconds)');
+function genChaCha() {
+  const raw = crypto.getRandomValues(new Uint8Array(32));
+  KS['chacha20'] = { raw, hex: b2h(raw) };
+  if (selAlgo === 'chacha20') renderKeys();
+  toast('✓ ChaCha20 key generated');
+}
 
+function gen3DES() {
+  const raw = crypto.getRandomValues(new Uint8Array(24)); // 192 bits, 168 effective
+  const str = Array.from(raw).map(b => String.fromCharCode(b)).join('');
+  KS['3des'] = { str, hex: b2h(raw) };
+  if (selAlgo === '3des') renderKeys();
+  toast('✓ 3DES key generated');
+}
+
+async function genRSA() {
+  const btn = document.getElementById('rsa-gen-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Generating RSA-2048…'; }
+  toast('⚙ Generating RSA-2048 keys… (~2 sec)');
   try {
     const pair = await crypto.subtle.generateKey(
-      { name:'RSA-OAEP', modulusLength:2048, publicExponent:new Uint8Array([1,0,1]), hash:'SHA-256' },
+      {name:'RSA-OAEP', modulusLength:2048, publicExponent:new Uint8Array([1,0,1]), hash:'SHA-256'},
       true, ['encrypt','decrypt']
     );
-    const pubExported = await crypto.subtle.exportKey('spki', pair.publicKey);
-    const pubB64 = btoa(String.fromCharCode(...new Uint8Array(pubExported)));
-    cryptoKeys['rsa-oaep'] = pair;
-    cryptoKeys['rsa-pub-display'] = pubB64.slice(0, 60) + '…';
-    renderKeyControls();
-    toast('RSA-2048 key pair generated!');
-  } catch(e) { toast('RSA generation failed: ' + e.message); }
-  sendBtn.disabled = false;
-  sendBtn.innerHTML = 'Encrypt & Send';
+    const spki = await crypto.subtle.exportKey('spki', pair.publicKey);
+    KS['rsa'] = pair;
+    KS['rsa-pub-b64'] = btoa(String.fromCharCode(...new Uint8Array(spki)));
+    renderKeys(); toast('✓ RSA-2048 key pair ready');
+  } catch(e) { toast('✗ RSA failed: ' + e.message); }
 }
 
-async function generateECDHKeys() {
-  const sendBtn = document.getElementById('send-btn');
-  sendBtn.disabled = true;
-  sendBtn.innerHTML = '<span class="spinner"></span> Generating...';
-  toast('Running ECDH P-256 key exchange…');
+async function genECDH() {
+  const btn = document.getElementById('ecdh-gen-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span> ECDH exchange…'; }
+  toast('⚙ Running ECDH P-256 key exchange…');
   try {
-    const aliceKP = await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'}, true, ['deriveKey']);
-    const bobKP   = await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'}, true, ['deriveKey']);
-    const shared  = await crypto.subtle.deriveKey(
-      { name:'ECDH', public: bobKP.publicKey },
-      aliceKP.privateKey,
-      { name:'AES-GCM', length:256 }, true, ['encrypt','decrypt']
+    const alice = await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'}, true, ['deriveKey']);
+    const bob   = await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'}, true, ['deriveKey']);
+    const shared = await crypto.subtle.deriveKey(
+      {name:'ECDH', public: bob.publicKey}, alice.privateKey,
+      {name:'AES-GCM', length:256}, true, ['encrypt','decrypt']
     );
     const raw = await crypto.subtle.exportKey('raw', shared);
-    const display = buf2hex(new Uint8Array(raw));
-    cryptoKeys['ecdh-aes'] = { shared, display };
-    cryptoKeys['ecdh-display'] = display.slice(0,32) + '…';
-    renderKeyControls();
-    toast('ECDH key exchange complete!');
-  } catch(e) { toast('ECDH failed: ' + e.message); }
-  sendBtn.disabled = false;
-  sendBtn.innerHTML = 'Encrypt & Send';
+    KS['ecdh'] = { key: shared };
+    KS['ecdh-hex'] = b2h(new Uint8Array(raw));
+    renderKeys(); toast('✓ ECDH shared secret derived');
+  } catch(e) { toast('✗ ECDH failed: ' + e.message); }
 }
 
-/* ════════════════════════════════════════════════════
-   CHACHA20-POLY1305 (pure JS, RFC 8439)
-════════════════════════════════════════════════════ */
-function chacha20Block(key, counter, nonce) {
-  const c = [0x61707865, 0x3320646e, 0x79622d32, 0x6b206574];
-  const k = [];
+/* ══════════════════════════════════════════════════════════
+   CHACHA20 CORE (RFC 8439)
+══════════════════════════════════════════════════════════ */
+function cc20Block(key, ctr, nonce) {
+  const c = [0x61707865,0x3320646e,0x79622d32,0x6b206574];
+  const k = [], n = [];
   for (let i=0;i<8;i++) k.push((key[i*4]|(key[i*4+1]<<8)|(key[i*4+2]<<16)|(key[i*4+3]<<24))>>>0);
-  const n = [];
   for (let i=0;i<3;i++) n.push((nonce[i*4]|(nonce[i*4+1]<<8)|(nonce[i*4+2]<<16)|(nonce[i*4+3]<<24))>>>0);
-  let s = [c[0],c[1],c[2],c[3], k[0],k[1],k[2],k[3], k[4],k[5],k[6],k[7],
-           counter>>>0, n[0],n[1],n[2]];
-  const rot = (v,n)=>((v<<n)|(v>>>32-n))>>>0;
-  const qr = (a,b,c,d)=>{
-    s[a]=(s[a]+s[b])>>>0; s[d]=rot(s[d]^s[a],16);
-    s[c]=(s[c]+s[d])>>>0; s[b]=rot(s[b]^s[c],12);
-    s[a]=(s[a]+s[b])>>>0; s[d]=rot(s[d]^s[a],8);
-    s[c]=(s[c]+s[d])>>>0; s[b]=rot(s[b]^s[c],7);
-  };
-  const orig = [...s];
-  for (let i=0;i<10;i++) {
-    qr(0,4,8,12); qr(1,5,9,13); qr(2,6,10,14); qr(3,7,11,15);
-    qr(0,5,10,15); qr(1,6,11,12); qr(2,7,8,13); qr(3,4,9,14);
-  }
+  const s = [c[0],c[1],c[2],c[3], k[0],k[1],k[2],k[3], k[4],k[5],k[6],k[7], ctr>>>0, n[0],n[1],n[2]];
+  const ro = (v,n)=>((v<<n)|(v>>>32-n))>>>0;
+  const qr = (a,b,c,d)=>{ s[a]=(s[a]+s[b])>>>0; s[d]=ro(s[d]^s[a],16); s[c]=(s[c]+s[d])>>>0; s[b]=ro(s[b]^s[c],12); s[a]=(s[a]+s[b])>>>0; s[d]=ro(s[d]^s[a],8); s[c]=(s[c]+s[d])>>>0; s[b]=ro(s[b]^s[c],7); };
+  const og = [...s];
+  for (let i=0;i<10;i++){ qr(0,4,8,12);qr(1,5,9,13);qr(2,6,10,14);qr(3,7,11,15); qr(0,5,10,15);qr(1,6,11,12);qr(2,7,8,13);qr(3,4,9,14); }
   const out = new Uint8Array(64);
-  for (let i=0;i<16;i++) {
-    const v = (s[i]+orig[i])>>>0;
-    out[i*4]=(v)&0xff; out[i*4+1]=(v>>8)&0xff; out[i*4+2]=(v>>16)&0xff; out[i*4+3]=(v>>24)&0xff;
-  }
+  for (let i=0;i<16;i++){ const v=(s[i]+og[i])>>>0; out[i*4]=v&255; out[i*4+1]=(v>>8)&255; out[i*4+2]=(v>>16)&255; out[i*4+3]=(v>>24)&255; }
+  return out;
+}
+function cc20(key, nonce, data) {
+  const out = new Uint8Array(data.length);
+  for (let i=0;i<data.length;i+=64){ const bl=cc20Block(key,(i/64)+1,nonce); for(let j=0;j<64&&i+j<data.length;j++) out[i+j]=data[i+j]^bl[j]; }
   return out;
 }
 
-function chacha20Encrypt(key, nonce, plaintext) {
-  const out = new Uint8Array(plaintext.length);
-  for (let i=0;i<plaintext.length;i+=64) {
-    const block = chacha20Block(key, (i/64)+1, nonce);
-    for (let j=0;j<64&&i+j<plaintext.length;j++) out[i+j]=plaintext[i+j]^block[j];
-  }
-  return out;
+/* ══════════════════════════════════════════════════════════
+   BLAKE2b-256 (RFC 7693)
+══════════════════════════════════════════════════════════ */
+const B2IV=[0xf3bcc908n,0x6a09e667n,0x84caa73bn,0xbb67ae85n,0xfe94f82bn,0x3c6ef372n,0x5f1d36f1n,0xa54ff53an,0xade682d1n,0x510e527fn,0x2b3e6c1fn,0x9b05688cn,0xfb41bd6bn,0x1f83d9abn,0x137e2179n,0x5be0cd19n];
+const SG=[[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],[14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3],[11,8,12,0,5,2,15,13,10,14,3,6,7,1,9,4],[7,9,3,1,13,12,11,14,2,6,5,10,4,0,15,8],[9,0,5,7,2,4,10,15,14,1,11,12,6,8,3,13],[2,12,6,10,0,11,8,3,4,13,7,5,15,14,1,9],[12,5,1,15,14,13,4,10,0,7,6,3,9,2,8,11],[13,11,7,14,12,1,3,9,5,0,15,4,8,6,2,10],[6,15,14,9,11,3,0,8,12,2,13,7,1,4,10,5],[10,2,8,4,7,6,1,5,15,11,9,14,3,12,13,0]];
+function blake2b256(msg){
+  if(typeof msg==='string') msg=new TextEncoder().encode(msg);
+  let h=[...B2IV]; h[0]^=0x01010000n|32n;
+  const bs=128, bl=Math.ceil((msg.length||1)/bs);
+  for(let b=0;b<bl;b++){ const blk=new Uint8Array(bs); blk.set(msg.slice(b*bs,(b+1)*bs)); h=b2compress(h,blk,BigInt(Math.min((b+1)*bs,msg.length)),b===bl-1); }
+  const out=new Uint8Array(32);
+  for(let i=0;i<4;i++){ const v=h[i]; for(let j=0;j<8;j++) out[i*8+j]=Number((v>>BigInt(j*8))&0xffn); }
+  return Array.from(out).map(x=>(x<16?'0':'')+x.toString(16)).join('');
+}
+function b2compress(hI,blk,t,last){
+  const m=new Array(16);
+  for(let i=0;i<16;i++){ let v=0n; for(let j=0;j<8;j++) v|=BigInt(blk[i*8+j])<<BigInt(j*8); m[i]=v; }
+  const v=[...hI,...B2IV]; v[12]^=t; v[13]^=0n; if(last) v[14]^=0xFFFFFFFFFFFFFFFFn;
+  const r64=(x,n)=>((x>>BigInt(n))|(x<<BigInt(64-n)))&0xFFFFFFFFFFFFFFFFn;
+  const G=(a,b,c,d,x,y)=>{ v[a]=(v[a]+v[b]+x)&0xFFFFFFFFFFFFFFFFn; v[d]=r64(v[d]^v[a],32); v[c]=(v[c]+v[d])&0xFFFFFFFFFFFFFFFFn; v[b]=r64(v[b]^v[c],24); v[a]=(v[a]+v[b]+y)&0xFFFFFFFFFFFFFFFFn; v[d]=r64(v[d]^v[a],16); v[c]=(v[c]+v[d])&0xFFFFFFFFFFFFFFFFn; v[b]=r64(v[b]^v[c],63); };
+  for(let r=0;r<12;r++){ const s=SG[r%10]; G(0,4,8,12,m[s[0]],m[s[1]]);G(1,5,9,13,m[s[2]],m[s[3]]);G(2,6,10,14,m[s[4]],m[s[5]]);G(3,7,11,15,m[s[6]],m[s[7]]); G(0,5,10,15,m[s[8]],m[s[9]]);G(1,6,11,12,m[s[10]],m[s[11]]);G(2,7,8,13,m[s[12]],m[s[13]]);G(3,4,9,14,m[s[14]],m[s[15]]); }
+  return hI.map((h,i)=>h^v[i]^v[i+8]);
 }
 
-/* ════════════════════════════════════════════════════
-   BLAKE2b-256 (pure JS, RFC 7693 subset)
-════════════════════════════════════════════════════ */
-const BLAKE2B_IV = [
-  0xf3bcc908n,0x6a09e667n, 0x84caa73bn,0xbb67ae85n,
-  0xfe94f82bn,0x3c6ef372n, 0x5f1d36f1n,0xa54ff53an,
-  0xade682d1n,0x510e527fn, 0x2b3e6c1fn,0x9b05688cn,
-  0xfb41bd6bn,0x1f83d9abn, 0x137e2179n,0x5be0cd19n,
-];
-const SIGMA = [
-  [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15],
-  [14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3],
-  [11,8,12,0,5,2,15,13,10,14,3,6,7,1,9,4],
-  [7,9,3,1,13,12,11,14,2,6,5,10,4,0,15,8],
-  [9,0,5,7,2,4,10,15,14,1,11,12,6,8,3,13],
-  [2,12,6,10,0,11,8,3,4,13,7,5,15,14,1,9],
-  [12,5,1,15,14,13,4,10,0,7,6,3,9,2,8,11],
-  [13,11,7,14,12,1,3,9,5,0,15,4,8,6,2,10],
-  [6,15,14,9,11,3,0,8,12,2,13,7,1,4,10,5],
-  [10,2,8,4,7,6,1,5,15,11,9,14,3,12,13,0],
-];
-function blake2b256(msg) {
-  if (typeof msg === 'string') {
-    const enc = new TextEncoder();
-    msg = enc.encode(msg);
-  }
-  const outLen = 32n;
-  let h = [...BLAKE2B_IV];
-  h[0] ^= 0x01010000n | outLen;
-  const blockSize = 128;
-  const blocks = Math.ceil((msg.length || 1) / blockSize);
-  for (let b=0;b<blocks;b++) {
-    const block = new Uint8Array(blockSize);
-    block.set(msg.slice(b*blockSize, (b+1)*blockSize));
-    const t = BigInt(Math.min((b+1)*blockSize, msg.length));
-    const isLast = b === blocks-1;
-    h = blake2bCompress(h, block, t, isLast);
-  }
-  const out = new Uint8Array(32);
-  for (let i=0;i<4;i++) {
-    const v = h[i];
-    for (let j=0;j<8;j++) out[i*8+j] = Number((v >> BigInt(j*8)) & 0xffn);
-  }
-  return Array.from(out).map(b=>(b<16?'0':'')+b.toString(16)).join('');
-}
-function blake2bCompress(hIn, block, t, isLast) {
-  const m = new Array(16);
-  for (let i=0;i<16;i++) {
-    let v = 0n;
-    for (let j=0;j<8;j++) v |= BigInt(block[i*8+j]) << BigInt(j*8);
-    m[i] = v;
-  }
-  const v = [...hIn, ...BLAKE2B_IV];
-  v[12] ^= t;
-  v[13] ^= 0n;
-  if (isLast) v[14] ^= 0xFFFFFFFFFFFFFFFFn;
-  const rot64=(x,n)=>((x>>BigInt(n))|(x<<BigInt(64-n)))&0xFFFFFFFFFFFFFFFFn;
-  const G=(a,b,c,d,x,y)=>{
-    v[a]=(v[a]+v[b]+x)&0xFFFFFFFFFFFFFFFFn; v[d]=rot64(v[d]^v[a],32);
-    v[c]=(v[c]+v[d])&0xFFFFFFFFFFFFFFFFn;   v[b]=rot64(v[b]^v[c],24);
-    v[a]=(v[a]+v[b]+y)&0xFFFFFFFFFFFFFFFFn; v[d]=rot64(v[d]^v[a],16);
-    v[c]=(v[c]+v[d])&0xFFFFFFFFFFFFFFFFn;   v[b]=rot64(v[b]^v[c],63);
-  };
-  for (let r=0;r<12;r++) {
-    const s=SIGMA[r%10];
-    G(0,4,8,12, m[s[0]],m[s[1]]); G(1,5,9,13, m[s[2]],m[s[3]]);
-    G(2,6,10,14,m[s[4]],m[s[5]]); G(3,7,11,15,m[s[6]],m[s[7]]);
-    G(0,5,10,15,m[s[8]],m[s[9]]); G(1,6,11,12,m[s[10]],m[s[11]]);
-    G(2,7,8,13, m[s[12]],m[s[13]]);G(3,4,9,14, m[s[14]],m[s[15]]);
-  }
-  return hIn.map((h,i)=>h^v[i]^v[i+8]);
-}
-
-/* ════════════════════════════════════════════════════
-   ENCRYPTION DISPATCH
-════════════════════════════════════════════════════ */
-async function encryptMessage(plaintext) {
+/* ══════════════════════════════════════════════════════════
+   ENCRYPTION ENGINE
+══════════════════════════════════════════════════════════ */
+async function encrypt(plain) {
   const t0 = performance.now();
-  let result = {};
+  let res = {};
 
-  switch(selectedAlgo) {
-    case 'aes-256-gcm': {
-      if (!cryptoKeys['aes-256-gcm']) throw new Error('Generate a key first');
+  switch(selAlgo) {
+    case 'aes-gcm': {
+      if (!KS['aes-gcm']) { await genAES(); }
       const iv = crypto.getRandomValues(new Uint8Array(12));
-      const enc = new TextEncoder();
-      const ct = await crypto.subtle.encrypt({name:'AES-GCM',iv}, cryptoKeys['aes-256-gcm'].key, enc.encode(plaintext));
-      const ctHex = buf2hex(new Uint8Array(ct));
-      const ivHex = buf2hex(iv);
-      result = { cipher: ctHex, iv: ivHex, extra: {IV: ivHex, mode:'GCM', keyLen:'256 bit', authTag:'128 bit'} };
-      // verify decrypt
-      const dec = await crypto.subtle.decrypt({name:'AES-GCM',iv}, cryptoKeys['aes-256-gcm'].key, ct);
-      result.decrypted = new TextDecoder().decode(dec);
-      result.keyDisplay = cryptoKeys['aes-256-gcm'].display.slice(0,32) + '…';
-      break;
+      const ct = await crypto.subtle.encrypt({name:'AES-GCM',iv}, KS['aes-gcm'].key, new TextEncoder().encode(plain));
+      const dec = await crypto.subtle.decrypt({name:'AES-GCM',iv}, KS['aes-gcm'].key, ct);
+      res = {
+        cipher: b2h(new Uint8Array(ct)),
+        decrypted: new TextDecoder().decode(dec),
+        key: KS['aes-gcm'].hex,
+        tags: {IV: b2h(iv), Mode:'GCM', KeyLen:'256 bit', AuthTag:'128 bit'},
+      }; break;
     }
     case 'chacha20': {
-      if (!cryptoKeys['chacha20']) throw new Error('Generate a key first');
+      if (!KS['chacha20']) genChaCha();
       const nonce = crypto.getRandomValues(new Uint8Array(12));
-      const plain = new TextEncoder().encode(plaintext);
-      const ct = chacha20Encrypt(cryptoKeys['chacha20'].raw, nonce, plain);
-      const ctHex = buf2hex(ct);
-      const nonceHex = buf2hex(nonce);
-      // decrypt
-      const dec = chacha20Encrypt(cryptoKeys['chacha20'].raw, nonce, ct);
-      result = {
-        cipher: ctHex, iv: nonceHex,
-        extra: { Nonce: nonceHex, mode:'Stream', keyLen:'256 bit', variant:'ChaCha20-Poly1305' },
-        decrypted: new TextDecoder().decode(dec),
-        keyDisplay: buf2hex(cryptoKeys['chacha20'].raw).slice(0,32) + '…'
-      };
-      break;
+      const pt = new TextEncoder().encode(plain);
+      const ct = cc20(KS['chacha20'].raw, nonce, pt);
+      const dec = cc20(KS['chacha20'].raw, nonce, ct);
+      res = {
+        cipher: b2h(ct), decrypted: new TextDecoder().decode(dec),
+        key: KS['chacha20'].hex,
+        tags: {Nonce: b2h(nonce), Mode:'Stream', KeyLen:'256 bit', MAC:'Poly1305'},
+      }; break;
     }
     case '3des': {
-      if (!cryptoKeys['3des']) throw new Error('Generate a key first');
-      const key = CryptoJS.enc.Utf8.parse(cryptoKeys['3des'].raw);
-      const encrypted = CryptoJS.TripleDES.encrypt(plaintext, key);
-      const ctStr = encrypted.toString();
-      const decrypted = CryptoJS.TripleDES.decrypt(ctStr, key).toString(CryptoJS.enc.Utf8);
-      result = {
-        cipher: ctStr, iv: encrypted.iv ? encrypted.iv.toString() : 'auto',
-        extra: { mode:'CBC', keyLen:'168 bit', padding:'PKCS7', warning:'⚠ Legacy cipher' },
-        decrypted,
-        keyDisplay: cryptoKeys['3des'].display.slice(0,32) + '…'
-      };
-      break;
+      if (!KS['3des']) gen3DES();
+      const k = CryptoJS.enc.Utf8.parse(KS['3des'].str);
+      const enc2 = CryptoJS.TripleDES.encrypt(plain, k);
+      const ctStr = enc2.toString();
+      const dec2 = CryptoJS.TripleDES.decrypt(ctStr, k).toString(CryptoJS.enc.Utf8);
+      res = {
+        cipher: ctStr, decrypted: dec2, key: KS['3des'].hex,
+        tags: {Mode:'CBC', KeyLen:'168 bit', Padding:'PKCS7', Warning:'⚠ Legacy'},
+        warn: true,
+      }; break;
     }
-    case 'rsa-oaep': {
-      if (!cryptoKeys['rsa-oaep']) throw new Error('Generate RSA keys first');
-      const enc = new TextEncoder();
-      if (enc.encode(plaintext).length > 190) throw new Error('RSA-OAEP can encrypt max ~190 bytes per block');
-      const ct = await crypto.subtle.encrypt({name:'RSA-OAEP'}, cryptoKeys['rsa-oaep'].publicKey, enc.encode(plaintext));
+    case 'rsa': {
+      if (!KS['rsa']) throw new Error('Generate RSA keys first (click ⚙ Generate)');
+      const enc2 = new TextEncoder().encode(plain);
+      if (enc2.length > 190) throw new Error('RSA-OAEP max ~190 bytes. Shorten message.');
+      const ct = await crypto.subtle.encrypt({name:'RSA-OAEP'}, KS['rsa'].publicKey, enc2);
+      const dec = await crypto.subtle.decrypt({name:'RSA-OAEP'}, KS['rsa'].privateKey, ct);
       const ctB64 = btoa(String.fromCharCode(...new Uint8Array(ct)));
-      const dec = await crypto.subtle.decrypt({name:'RSA-OAEP'}, cryptoKeys['rsa-oaep'].privateKey, ct);
-      result = {
-        cipher: ctB64.slice(0,80) + '…', iv: 'N/A (asymmetric)',
-        extra: { keyLen:'2048 bit', padding:'OAEP+SHA-256', scheme:'RSA' },
-        decrypted: new TextDecoder().decode(dec),
-        keyDisplay: 'RSA-2048 public key'
-      };
-      break;
+      res = {
+        cipher: ctB64, decrypted: new TextDecoder().decode(dec),
+        key: 'RSA-2048 public key (Bob)',
+        tags: {KeyLen:'2048 bit', Padding:'OAEP+SHA-256', Scheme:'RSA'},
+      }; break;
     }
-    case 'ecdh-aes': {
-      if (!cryptoKeys['ecdh-aes']) throw new Error('Run ECDH key exchange first');
+    case 'ecdh': {
+      if (!KS['ecdh']) await genECDH();
       const iv = crypto.getRandomValues(new Uint8Array(12));
-      const enc = new TextEncoder();
-      const ct = await crypto.subtle.encrypt({name:'AES-GCM',iv}, cryptoKeys['ecdh-aes'].shared, enc.encode(plaintext));
-      const dec = await crypto.subtle.decrypt({name:'AES-GCM',iv}, cryptoKeys['ecdh-aes'].shared, ct);
-      result = {
-        cipher: buf2hex(new Uint8Array(ct)).slice(0,64)+'…', iv: buf2hex(iv),
-        extra: { keyExchange:'ECDH P-256', cipher:'AES-256-GCM', IV: buf2hex(iv) },
-        decrypted: new TextDecoder().decode(dec),
-        keyDisplay: cryptoKeys['ecdh-aes'].display.slice(0,32)+'…'
-      };
-      break;
+      const ct = await crypto.subtle.encrypt({name:'AES-GCM',iv}, KS['ecdh'].key, new TextEncoder().encode(plain));
+      const dec = await crypto.subtle.decrypt({name:'AES-GCM',iv}, KS['ecdh'].key, ct);
+      res = {
+        cipher: b2h(new Uint8Array(ct)), decrypted: new TextDecoder().decode(dec),
+        key: KS['ecdh-hex'],
+        tags: {Exchange:'ECDH P-256', Cipher:'AES-256-GCM', IV: b2h(iv)},
+      }; break;
     }
-    case 'sha-256': {
-      const enc = new TextEncoder();
-      const hash = await crypto.subtle.digest('SHA-256', enc.encode(plaintext));
-      const hashHex = buf2hex(new Uint8Array(hash));
-      result = { cipher: null, hash: hashHex, extra: { algo:'SHA-256', bits:256, standard:'FIPS 180-4' }, isHash: true };
-      break;
+    case 'sha256': {
+      const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(plain));
+      res = { hash: b2h(new Uint8Array(h)), tags: {Algo:'SHA-256', Bits:256, Standard:'FIPS 180-4'}, isHash:true }; break;
     }
-    case 'sha-3': {
-      const hash = CryptoJS.SHA3(plaintext, {outputLength:256}).toString();
-      result = { cipher: null, hash, extra: { algo:'SHA-3-256', bits:256, standard:'FIPS 202', construction:'Keccak sponge' }, isHash: true };
-      break;
+    case 'sha3': {
+      const h = CryptoJS.SHA3(plain, {outputLength:256}).toString();
+      res = { hash: h, tags: {Algo:'SHA-3-256', Bits:256, Standard:'FIPS 202', Type:'Keccak sponge'}, isHash:true }; break;
     }
     case 'blake2b': {
-      const hash = blake2b256(plaintext);
-      result = { cipher: null, hash, extra: { algo:'BLAKE2b-256', bits:256, standard:'RFC 7693' }, isHash: true };
-      break;
+      const h = blake2b256(plain);
+      res = { hash: h, tags: {Algo:'BLAKE2b-256', Bits:256, Standard:'RFC 7693'}, isHash:true }; break;
     }
   }
 
-  result.timing = (performance.now() - t0).toFixed(2) + ' ms';
-  return result;
+  res.ms = (performance.now()-t0).toFixed(2);
+  return res;
 }
 
-/* ════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════
    CHAT
-════════════════════════════════════════════════════ */
+══════════════════════════════════════════════════════════ */
 function setSender(s) {
-  currentSender = s;
-  document.getElementById('sender-a-btn').className = 'sender-btn' + (s==='A'?' active-a':'');
-  document.getElementById('sender-b-btn').className = 'sender-btn' + (s==='B'?' active-b':'');
+  sender = s;
+  document.getElementById('sw-a').className = 'sw-btn' + (s==='A'?' sa':'');
+  document.getElementById('sw-b').className = 'sw-btn' + (s==='B'?' sb':'');
 }
 
-async function sendMessage() {
-  const input = document.getElementById('msg-input');
+function updateCharCount() {
+  const v = document.getElementById('msg-in').value.length;
+  const el = document.getElementById('char-cnt');
+  el.textContent = v;
+  el.style.color = v > 180 && selAlgo === 'rsa' ? 'var(--red)' : 'var(--dim)';
+}
+
+async function sendMsg() {
+  const input = document.getElementById('msg-in');
   const text = input.value.trim();
-  if (!text) { toast('Type a message first'); return; }
+  if (!text) { toast('⚠ Type a message first'); return; }
 
   const btn = document.getElementById('send-btn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Encrypting…';
 
   try {
-    const result = await encryptMessage(text);
-    appendMessage(text, result, currentSender);
+    const res = await encrypt(text);
+    addMsg(text, res, sender);
     input.value = '';
-    document.getElementById('chat-empty').style.display = 'none';
-  } catch(e) { toast('Error: ' + e.message); }
+    document.getElementById('char-cnt').textContent = '0';
+    // Hide empty state
+    const es = document.getElementById('empty');
+    if (es) es.style.display = 'none';
+  } catch(e) {
+    toast('✗ ' + e.message);
+  }
 
-  btn.disabled = false; btn.innerHTML = 'Encrypt & Send';
+  btn.disabled = false;
+  btn.innerHTML = 'Encrypt &amp; Send';
 }
 
-function appendMessage(plain, result, sender) {
-  const msgs = document.getElementById('chat-messages');
-  const block = document.createElement('div');
-  block.className = `msg-block from-${sender.toLowerCase()}`;
+function addMsg(plain, res, who) {
+  const msgs = document.getElementById('msgs');
+  msgCount++;
+  const algoName = ALGOS.find(a=>a.id===selAlgo).name;
+  const time = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const id = 'msg-' + msgCount;
 
-  const algoName = ALGOS.find(a=>a.id===selectedAlgo).name;
-  const time = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  const wrap = document.createElement('div');
+  wrap.className = `msg-wrap ${who.toLowerCase()}`;
+  wrap.id = id;
 
-  let bubbleContent = `<div class="msg-plain">${escHtml(plain)}</div>`;
+  let body = `<div class="msg-plain">${esc(plain)}</div>`;
 
-  if (result.isHash) {
-    bubbleContent += `<div class="msg-label">HASH OUTPUT</div>
-      <div class="msg-hash">${result.hash}</div>`;
+  if (res.isHash) {
+    body += `<div class="sec-label">HASH OUTPUT <span class="copy-inline" onclick="copyText('${res.hash}')" title="Copy hash">📋</span></div>
+             <div class="mono-block hash-text">${res.hash}</div>`;
   } else {
-    bubbleContent += `<div class="msg-label">CIPHERTEXT</div>
-      <div class="msg-cipher">${escHtml(result.cipher)}</div>`;
-    if (result.decrypted !== undefined) {
-      bubbleContent += `<div class="msg-label">DECRYPTED ✓</div>
-        <div class="msg-decrypted">${escHtml(result.decrypted)}</div>`;
+    const cipDisplay = res.cipher.length > 120 ? res.cipher.slice(0,120)+'…' : res.cipher;
+    body += `<div class="sec-label">CIPHERTEXT <span class="copy-inline" onclick="copyText('${res.cipher.replace(/'/g,"&#39;")}')" title="Copy ciphertext">📋</span></div>
+             <div class="mono-block cipher-text">${esc(cipDisplay)}</div>`;
+    if (res.decrypted !== undefined) {
+      body += `<div class="sec-label">DECRYPTED ✓</div>
+               <div class="mono-block decrypt-text">${esc(res.decrypted)}</div>`;
     }
-    if (result.keyDisplay) {
-      bubbleContent += `<div class="msg-label">KEY</div>
-        <div class="msg-hash" style="color:#fbbf24;">${escHtml(result.keyDisplay)}</div>`;
+    if (res.key) {
+      const kDisp = res.key.length > 64 ? res.key.slice(0,64)+'…' : res.key;
+      body += `<div class="sec-label">KEY <span class="copy-inline" onclick="copyText('${res.key.replace(/'/g,"&#39;")}')" title="Copy key">📋</span></div>
+               <div class="mono-block key-text">${esc(kDisp)}</div>`;
     }
   }
 
-  const extraTags = Object.entries(result.extra || {}).map(([k,v]) =>
-    `<span class="meta-tag">${k}: ${escHtml(String(v))}</span>`).join('');
+  const tagHtml = Object.entries(res.tags||{}).map(([k,v]) =>
+    `<span class="tag${String(v).startsWith('⚠') ? ' tag-warn' : ''}">${k}: ${esc(String(v))}</span>`
+  ).join('');
 
-  block.innerHTML = `
-    <div class="msg-sender">${sender === 'A' ? '👤 Alice' : '👤 Bob'}</div>
-    <div class="msg-bubble">${bubbleContent}
-      <div class="msg-meta">
-        <span class="meta-tag algo">${algoName}</span>
-        <span class="meta-tag timing">⏱ ${result.timing}</span>
-        ${extraTags}
-      </div>
-    </div>
-    <div class="msg-timestamp">${time}</div>`;
+  body += `<div class="meta-row">
+    <span class="tag tag-algo">${algoName}</span>
+    <span class="tag tag-time">⏱ ${res.ms} ms</span>
+    ${tagHtml}
+  </div>`;
 
-  msgs.appendChild(block);
+  wrap.innerHTML = `
+    <div class="msg-who">${who==='A' ? '👤 Alice' : '👤 Bob'}</div>
+    <div class="bubble">${body}</div>
+    <div class="msg-ts">${time}</div>`;
+
+  msgs.appendChild(wrap);
   msgs.scrollTop = msgs.scrollHeight;
 }
 
 function clearChat() {
-  const msgs = document.getElementById('chat-messages');
-  msgs.innerHTML = `<div class="chat-empty" id="chat-empty">
-    <div class="icon">🔒</div>
-    <p>Select an algorithm, generate a key,<br>and start encrypting messages.</p>
+  const msgs = document.getElementById('msgs');
+  msgs.innerHTML = `<div class="empty-state" id="empty">
+    <div class="empty-icon">🔒</div>
+    <div class="empty-hint">Chat cleared. Select an algorithm and start again.</div>
   </div>`;
+  msgCount = 0;
+  toast('🗑 Chat cleared');
 }
 
-/* ════════════════════════════════════════════════════
-   SCREENSHOT & GALLERY
-════════════════════════════════════════════════════ */
-async function takeScreenshot() {
-  const chatPanel = document.querySelector('.chat-panel');
+/* ══════════════════════════════════════════════════════════
+   SCREENSHOT
+══════════════════════════════════════════════════════════ */
+async function doScreenshot() {
+  const pane = document.querySelector('.chat-pane');
+  toast('📸 Capturing…');
   try {
-    toast('Capturing screenshot…');
-    const canvas = await html2canvas(chatPanel, {
-      backgroundColor: null, scale: 1.5, useCORS: true,
-      logging: false
+    const canvas = await html2canvas(pane, {
+      backgroundColor: '#080818', scale: 1.6, useCORS: true, logging: false,
     });
     const dataUrl = canvas.toDataURL('image/png');
-    const caption = `${new Date().toLocaleString()} · ${ALGOS.find(a=>a.id===selectedAlgo).name}`;
-    saveScreenshot(dataUrl, caption);
-    toast('Screenshot saved to gallery!');
-  } catch(e) {
-    toast('Screenshot failed. Try again.'); console.error(e);
-  }
+    const caption = new Date().toLocaleString() + ' · ' + ALGOS.find(a=>a.id===selAlgo).name;
+    saveShot(dataUrl, caption);
+    toast('✓ Screenshot saved to gallery!');
+  } catch(e) { toast('✗ Screenshot failed: ' + e.message); }
 }
 
-function saveScreenshot(dataUrl, caption) {
-  const users = JSON.parse(localStorage.getItem('cc_users') || '{}');
-  if (!users[currentUser]) return;
-  if (!users[currentUser].gallery) users[currentUser].gallery = [];
-  users[currentUser].gallery.push({ dataUrl, caption, id: Date.now() });
-  // keep max 30 screenshots
-  if (users[currentUser].gallery.length > 30) users[currentUser].gallery.shift();
-  localStorage.setItem('cc_users', JSON.stringify(users));
+function saveShot(dataUrl, caption) {
+  const DB = JSON.parse(localStorage.getItem('cc_db') || '{}');
+  if (!DB[CU]) return;
+  if (!DB[CU].gallery) DB[CU].gallery = [];
+  DB[CU].gallery.push({ dataUrl, caption, id: Date.now() });
+  if (DB[CU].gallery.length > 40) DB[CU].gallery.shift();
+  localStorage.setItem('cc_db', JSON.stringify(DB));
 }
 
+/* ══════════════════════════════════════════════════════════
+   GALLERY
+══════════════════════════════════════════════════════════ */
 function openGallery() {
-  const users = JSON.parse(localStorage.getItem('cc_users') || '{}');
-  const gallery = users[currentUser]?.gallery || [];
-  const grid = document.getElementById('gallery-grid');
+  const DB = JSON.parse(localStorage.getItem('cc_db') || '{}');
+  const shots = DB[CU]?.gallery || [];
+  const grid = document.getElementById('gal-grid');
 
-  if (gallery.length === 0) {
-    grid.innerHTML = '<div class="gallery-empty">No screenshots yet.<br>Use the 📸 button to capture the chat.</div>';
+  if (!shots.length) {
+    grid.innerHTML = '<div class="gal-empty">No screenshots yet.<br>Use 📸 to capture the chat.</div>';
   } else {
     grid.innerHTML = '';
-    [...gallery].reverse().forEach(item => {
-      const div = document.createElement('div');
-      div.className = 'gallery-item';
-      div.innerHTML = `<img src="${item.dataUrl}" alt="screenshot" onclick="openLightbox('${item.id}')">
-        <div class="gallery-item-caption">
-          <span>${item.caption}</span>
-          <span class="btn-dl-img" onclick="downloadScreenshot('${item.id}')" title="Download">⬇</span>
+    [...shots].reverse().forEach(s => {
+      const d = document.createElement('div');
+      d.className = 'gal-item';
+      d.innerHTML = `
+        <div class="gal-del" onclick="deleteShot(${s.id},event)" title="Delete">✕</div>
+        <img class="gal-img" src="${s.dataUrl}" onclick="openLightbox(${s.id})">
+        <div class="gal-cap">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.caption}</span>
+          <span class="gal-dl" onclick="dlShot(${s.id})" title="Download">⬇</span>
         </div>`;
-      grid.appendChild(div);
+      grid.appendChild(d);
     });
   }
-  document.getElementById('gallery-modal').classList.add('open');
+  document.getElementById('gallery').classList.add('on');
 }
+function closeGallery() { document.getElementById('gallery').classList.remove('on'); }
 
-function closeGallery() { document.getElementById('gallery-modal').classList.remove('open'); }
+function deleteShot(id, e) {
+  e.stopPropagation();
+  const DB = JSON.parse(localStorage.getItem('cc_db') || '{}');
+  if (DB[CU]) {
+    DB[CU].gallery = (DB[CU].gallery||[]).filter(s => s.id !== id);
+    localStorage.setItem('cc_db', JSON.stringify(DB));
+  }
+  openGallery(); // refresh
+  toast('🗑 Screenshot deleted');
+}
 
 function openLightbox(id) {
-  const users = JSON.parse(localStorage.getItem('cc_users') || '{}');
-  const item = users[currentUser]?.gallery?.find(g => g.id == id);
-  if (!item) return;
-  document.getElementById('lightbox-img').src = item.dataUrl;
-  document.getElementById('lightbox').classList.add('open');
+  const DB = JSON.parse(localStorage.getItem('cc_db') || '{}');
+  const s = DB[CU]?.gallery?.find(x => x.id === id);
+  if (!s) return;
+  document.getElementById('lb-img').src = s.dataUrl;
+  document.getElementById('lightbox').classList.add('on');
 }
-function closeLightbox() { document.getElementById('lightbox').classList.remove('open'); }
+function closeLightbox() { document.getElementById('lightbox').classList.remove('on'); }
 
-function downloadScreenshot(id) {
-  const users = JSON.parse(localStorage.getItem('cc_users') || '{}');
-  const item = users[currentUser]?.gallery?.find(g => g.id == id);
-  if (!item) return;
+function dlShot(id) {
+  const DB = JSON.parse(localStorage.getItem('cc_db') || '{}');
+  const s = DB[CU]?.gallery?.find(x => x.id === id);
+  if (!s) return;
   const a = document.createElement('a');
-  a.href = item.dataUrl;
-  a.download = `cryptchat-${id}.png`;
-  a.click();
+  a.href = s.dataUrl; a.download = `cryptchat-${id}.png`; a.click();
 }
 
-/* ════════════════════════════════════════════════════
-   MUSIC ENGINE — Web Audio API Dark Ambient Generator
-════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════
+   ALGO INFO MODAL
+══════════════════════════════════════════════════════════ */
+function openAlgoInfo() {
+  const a = ALGOS.find(x => x.id === selAlgo);
+  document.getElementById('ii-title').textContent = a.name;
+  document.getElementById('ii-body').innerHTML = a.desc;
+  document.getElementById('ii-props').innerHTML = Object.entries(a.props).map(([k,v]) =>
+    `<div class="info-prop"><div class="info-prop-k">${k}</div><div class="info-prop-v">${v}</div></div>`
+  ).join('');
+  document.getElementById('algo-info').classList.add('on');
+}
+function closeAlgoInfo() { document.getElementById('algo-info').classList.remove('on'); }
+
+/* ══════════════════════════════════════════════════════════
+   MUSIC ENGINE — Web Audio API Dark Ambient
+══════════════════════════════════════════════════════════ */
 const TRACKS = [
-  { name: 'Deep Cipher', desc: 'Sub-bass drone · Encrypted atmosphere' },
-  { name: 'Binary Rain', desc: 'Rhythmic pulses · Dark pad · 80bpm' },
-  { name: 'Network Intrusion', desc: 'Glitch textures · Low-frequency sweep' },
-  { name: 'Zero Day', desc: 'Slow evolving drone · Reverb space' },
-  { name: 'Quantum Noise', desc: 'White noise bed · Micro-tonal shimmer' },
+  { name:'Deep Cipher',       sub:'Sub-bass drone · Encrypted atmosphere', build: t0 },
+  { name:'Binary Rain',       sub:'Rhythmic pulses · Dark pad synthesis',  build: t1 },
+  { name:'Network Intrusion', sub:'Glitch sweep · Low-frequency rumble',   build: t2 },
+  { name:'Zero Day',          sub:'Slow evolving drone · Reverb space',    build: t3 },
+  { name:'Quantum Noise',     sub:'White noise bed · Micro-tonal shimmer', build: t4 },
 ];
 
-let audioCtx = null;
-let masterGain = null;
-let currentTrackNodes = [];
-let currentTrackIdx = 0;
-let isPlaying = false;
-let progressInterval = null;
-let trackStartTime = 0;
-const TRACK_DURATION = 120; // 2 min loop
-let mediaRecorder = null;
-let recordedChunks = [];
+let audioCtx = null, masterGain = null, analyser = null;
+let trackNodes = [], trackIdx = 0, playing = false;
+let progTimer = null, startTime = 0;
+const TDUR = 120;
 
-function initMusic() {
-  document.getElementById('track-name').textContent = TRACKS[currentTrackIdx].name;
-  document.getElementById('track-artist').textContent = TRACKS[currentTrackIdx].desc;
+function initPlayer() {
+  document.getElementById('t-name').textContent = TRACKS[0].name;
+  document.getElementById('t-sub').textContent = TRACKS[0].sub;
 }
 
-function getOrCreateCtx() {
+function ensureCtx() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = audioCtx.createGain();
-    masterGain.gain.value = 0.4;
-    masterGain.connect(audioCtx.destination);
+    masterGain.gain.value = document.getElementById('vol').value / 100;
+
+    // Real-time analyser for visualizer
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 32;
+    masterGain.connect(analyser);
+    analyser.connect(audioCtx.destination);
+
+    startVisualizer();
   }
   if (audioCtx.state === 'suspended') audioCtx.resume();
-  return audioCtx;
 }
 
-function stopCurrentTrack() {
-  currentTrackNodes.forEach(n => { try { n.stop(); } catch(e){} });
-  currentTrackNodes = [];
-  if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
+function startVisualizer() {
+  const bars = document.querySelectorAll('.vbar');
+  const buf = new Uint8Array(analyser.frequencyBinCount);
+  function loop() {
+    requestAnimationFrame(loop);
+    analyser.getByteFrequencyData(buf);
+    bars.forEach((b, i) => {
+      const val = (buf[i] || 0) / 255;
+      const h = Math.max(3, Math.round(val * 26));
+      b.style.height = h + 'px';
+      b.style.opacity = playing ? (0.5 + val * 0.5) : 0.3;
+    });
+  }
+  loop();
+}
+
+function stopTrack() {
+  trackNodes.forEach(n => { try { n.stop(); } catch(e){} });
+  trackNodes = [];
+  if (progTimer) { clearInterval(progTimer); progTimer = null; }
 }
 
 function playTrack(idx) {
-  const ctx = getOrCreateCtx();
-  stopCurrentTrack();
-  currentTrackIdx = idx;
-  const t = TRACKS[idx];
-  document.getElementById('track-name').textContent = t.name;
-  document.getElementById('track-artist').textContent = t.desc;
-
-  const nodes = buildTrack(ctx, idx);
-  currentTrackNodes = nodes;
-  trackStartTime = ctx.currentTime;
-  isPlaying = true;
+  ensureCtx();
+  stopTrack();
+  trackIdx = idx;
+  const tr = TRACKS[idx];
+  document.getElementById('t-name').textContent = tr.name;
+  document.getElementById('t-sub').textContent = tr.sub;
   document.getElementById('play-btn').textContent = '⏸';
+  trackNodes = tr.build();
+  startTime = audioCtx.currentTime;
+  playing = true;
 
-  progressInterval = setInterval(() => {
-    const elapsed = (audioCtx.currentTime - trackStartTime) % TRACK_DURATION;
-    document.getElementById('progress-fill').style.width = (elapsed / TRACK_DURATION * 100) + '%';
-  }, 500);
-}
-
-function buildTrack(ctx, idx) {
-  const nodes = [];
-  const dest = masterGain;
-
-  const makeOsc = (freq, type='sine', gain=0.15, detune=0) => {
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = type;
-    osc.frequency.value = freq;
-    osc.detune.value = detune;
-    g.gain.value = gain;
-    osc.connect(g); g.connect(dest);
-    osc.start();
-    nodes.push(osc);
-    return { osc, g };
-  };
-
-  const makeNoise = (gainVal=0.05, filterFreq=400) => {
-    const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i=0;i<data.length;i++) data[i] = Math.random()*2-1;
-    const src = ctx.createBufferSource();
-    src.buffer = buf; src.loop = true;
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass'; filter.frequency.value = filterFreq;
-    const g = ctx.createGain(); g.gain.value = gainVal;
-    src.connect(filter); filter.connect(g); g.connect(dest);
-    src.start();
-    nodes.push(src);
-    return { src, filter, g };
-  };
-
-  const makeLFO = (target, minVal, maxVal, rate=0.1) => {
-    const lfo = ctx.createOscillator();
-    const lfoGain = ctx.createGain();
-    lfo.frequency.value = rate;
-    lfoGain.gain.value = (maxVal - minVal) / 2;
-    target.value = (maxVal + minVal) / 2;
-    lfo.connect(lfoGain); lfoGain.connect(target);
-    lfo.start();
-    nodes.push(lfo);
-    return lfo;
-  };
-
-  if (idx === 0) { // Deep Cipher
-    makeOsc(40, 'sine', 0.3);
-    makeOsc(80, 'sine', 0.12);
-    makeOsc(43, 'sine', 0.1, -7);
-    makeNoise(0.015, 200);
-    const {osc: mod} = makeOsc(0.08, 'sine', 0);
-    makeLFO(makeOsc(120, 'sine', 0.08).g.gain, 0.02, 0.12, 0.07);
-  } else if (idx === 1) { // Binary Rain
-    const beats = [0, 0.5, 0.75, 1.0, 1.5, 1.75];
-    beats.forEach((t, i) => {
-      const osc = ctx.createOscillator();
-      const env = ctx.createGain();
-      osc.frequency.value = 220 + (i%3)*110;
-      osc.type = 'square';
-      env.gain.setValueAtTime(0, ctx.currentTime);
-      const beatLen = 0.75;
-      for (let rep=0; rep < 160; rep++) {
-        const bt = ctx.currentTime + t + rep * beatLen * 2;
-        env.gain.setValueAtTime(0.06, bt);
-        env.gain.exponentialRampToValueAtTime(0.001, bt + 0.1);
-      }
-      osc.connect(env); env.connect(dest); osc.start();
-      nodes.push(osc);
-    });
-    makeOsc(55, 'sine', 0.18);
-    makeNoise(0.02, 300);
-  } else if (idx === 2) { // Network Intrusion
-    makeOsc(60, 'sawtooth', 0.08);
-    makeOsc(90, 'sine', 0.1);
-    const {osc} = makeOsc(200, 'sine', 0.06);
-    makeLFO(osc.frequency, 150, 350, 0.15);
-    makeNoise(0.04, 800);
-    makeNoise(0.015, 150);
-  } else if (idx === 3) { // Zero Day
-    makeOsc(35, 'sine', 0.25);
-    makeOsc(70, 'sine', 0.08);
-    const {g} = makeOsc(105, 'sine', 0.05);
-    makeLFO(g.gain, 0.01, 0.08, 0.03);
-    makeOsc(140, 'sine', 0.04, 5);
-    makeNoise(0.01, 100);
-  } else { // Quantum Noise
-    makeNoise(0.06, 600);
-    makeNoise(0.04, 200);
-    makeOsc(50, 'sine', 0.2);
-    [55,57.5,60,65].forEach(f => makeOsc(f, 'sine', 0.04, Math.random()*10-5));
-  }
-  return nodes;
+  progTimer = setInterval(() => {
+    const el = (audioCtx.currentTime - startTime) % TDUR;
+    document.getElementById('pfill').style.width = (el / TDUR * 100) + '%';
+    const s = Math.round(el);
+    document.getElementById('pt-cur').textContent = Math.floor(s/60) + ':' + (s%60).toString().padStart(2,'0');
+  }, 333);
 }
 
 function togglePlay() {
-  if (!audioCtx) {
-    playTrack(currentTrackIdx); return;
-  }
-  if (isPlaying) {
-    stopCurrentTrack();
-    audioCtx.suspend();
-    isPlaying = false;
-    document.getElementById('play-btn').textContent = '▶';
+  if (!playing) {
+    if (!audioCtx) { playTrack(trackIdx); return; }
+    audioCtx.resume();
+    playTrack(trackIdx);
   } else {
-    playTrack(currentTrackIdx);
+    stopTrack();
+    audioCtx.suspend();
+    playing = false;
+    document.getElementById('play-btn').textContent = '▶';
   }
 }
 
-function nextTrack() { playTrack((currentTrackIdx + 1) % TRACKS.length); }
-function prevTrack() { playTrack((currentTrackIdx - 1 + TRACKS.length) % TRACKS.length); }
+function nextTrack() { playTrack((trackIdx+1) % TRACKS.length); }
+function prevTrack() { playTrack((trackIdx-1+TRACKS.length) % TRACKS.length); }
+function setVol(v) { if (masterGain) masterGain.gain.value = v/100; }
+let muted = false, prevVol = 40;
+function toggleMute() {
+  const sl = document.getElementById('vol');
+  if (!muted) { prevVol = sl.value; sl.value = 0; setVol(0); muted = true; }
+  else { sl.value = prevVol; setVol(prevVol); muted = false; }
+}
+function seekTo(e) { /* restart track */ if (playing) { stopTrack(); playing=false; playTrack(trackIdx); } }
 
-function setVolume(val) {
-  if (masterGain) masterGain.gain.value = val / 100;
+// ── Track builders ──
+function makeOsc(f, type='sine', gain=0.15, det=0) {
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type=type; o.frequency.value=f; o.detune.value=det; g.gain.value=gain;
+  o.connect(g); g.connect(masterGain); o.start();
+  trackNodes.push(o); return {o,g};
+}
+function makeNoise(gain=0.04, freq=400, type='lowpass') {
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate*4, audioCtx.sampleRate);
+  const d = buf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  const src = audioCtx.createBufferSource(); src.buffer=buf; src.loop=true;
+  const flt = audioCtx.createBiquadFilter(); flt.type=type; flt.frequency.value=freq;
+  const g = audioCtx.createGain(); g.gain.value=gain;
+  src.connect(flt); flt.connect(g); g.connect(masterGain); src.start();
+  trackNodes.push(src); return {src,flt,g};
+}
+function makeLFO(param, lo, hi, rate=0.08) {
+  const lfo = audioCtx.createOscillator(), lg = audioCtx.createGain();
+  lfo.frequency.value=rate; lg.gain.value=(hi-lo)/2; param.value=(hi+lo)/2;
+  lfo.connect(lg); lg.connect(param); lfo.start();
+  trackNodes.push(lfo);
+}
+function t0() { // Deep Cipher
+  makeOsc(40,'sine',0.28); makeOsc(80,'sine',0.11); makeOsc(42,'sine',0.09,-8);
+  makeNoise(0.015,180); makeNoise(0.008,80,'bandpass');
+  const {g} = makeOsc(120,'sine',0.07); makeLFO(g.gain, 0.02, 0.12, 0.06);
+  makeLFO(makeOsc(60,'sine',0.05).o.frequency, 58, 63, 0.04);
+  return trackNodes.slice();
+}
+function t1() { // Binary Rain
+  const bt = 0.8;
+  [0,0.4,0.6,1.0,1.4,1.6].forEach((off,i) => {
+    const o=audioCtx.createOscillator(), e=audioCtx.createGain();
+    o.frequency.value=220+(i%4)*110; o.type='square';
+    e.gain.setValueAtTime(0, audioCtx.currentTime);
+    for(let r=0;r<150;r++) {
+      const t=audioCtx.currentTime+off+r*bt*2;
+      e.gain.setValueAtTime(0.055,t); e.gain.exponentialRampToValueAtTime(0.001,t+0.12);
+    }
+    o.connect(e); e.connect(masterGain); o.start(); trackNodes.push(o);
+  });
+  makeOsc(55,'sine',0.20); makeNoise(0.018,350);
+  return trackNodes.slice();
+}
+function t2() { // Network Intrusion
+  makeOsc(60,'sawtooth',0.07); makeNoise(0.04,900); makeNoise(0.02,130);
+  const {o} = makeOsc(200,'sine',0.06); makeLFO(o.frequency, 140, 360, 0.14);
+  const {g} = makeOsc(300,'triangle',0.04); makeLFO(g.gain, 0.005, 0.06, 0.3);
+  makeOsc(90,'sine',0.09);
+  return trackNodes.slice();
+}
+function t3() { // Zero Day
+  makeOsc(35,'sine',0.26); makeOsc(70,'sine',0.09);
+  const {g} = makeOsc(105,'sine',0.05); makeLFO(g.gain, 0.01, 0.09, 0.025);
+  makeOsc(140,'sine',0.04,6); makeNoise(0.01,100);
+  makeLFO(makeOsc(52,'sine',0.07).o.frequency, 50,55,0.03);
+  return trackNodes.slice();
+}
+function t4() { // Quantum Noise
+  makeNoise(0.065,700); makeNoise(0.045,220); makeNoise(0.02,3000,'highpass');
+  makeOsc(50,'sine',0.22);
+  [55,57.5,60,65].forEach(f => makeOsc(f,'sine',0.035,Math.random()*12-6));
+  const {g} = makeOsc(100,'sine',0.04); makeLFO(g.gain,0,0.08,0.09);
+  return trackNodes.slice();
 }
 
-function seekTrack(e) {
-  const bar = document.getElementById('progress-bar');
-  const ratio = e.offsetX / bar.offsetWidth;
-  if (!isPlaying) return;
-  // restart track from a point
-  stopCurrentTrack();
-  isPlaying = false;
-  playTrack(currentTrackIdx);
-}
+/* ── WAV Download ── */
+async function dlTrack() {
+  toast('⚙ Rendering 8s WAV…');
+  const sr = (audioCtx||{sampleRate:44100}).sampleRate;
+  const off = new OfflineAudioContext(2, sr*8, sr);
+  const mg = off.createGain(); mg.gain.value = 0.7; mg.connect(off.destination);
 
-async function downloadTrack() {
-  const ctx = getOrCreateCtx();
-  toast('Recording 8 seconds of track…');
+  // build offline version
+  const oldCtx = audioCtx, oldMG = masterGain, oldNodes = trackNodes;
+  audioCtx = off; masterGain = mg; trackNodes = [];
+  TRACKS[trackIdx].build();
+  audioCtx = oldCtx; masterGain = oldMG; trackNodes = oldNodes;
 
-  // Create offline context for recording
-  const offlineCtx = new OfflineAudioContext(2, ctx.sampleRate * 8, ctx.sampleRate);
-  const offMaster = offlineCtx.createGain();
-  offMaster.gain.value = 0.7;
-  offMaster.connect(offlineCtx.destination);
-
-  // Build track in offline context
-  buildTrackOffline(offlineCtx, offMaster, currentTrackIdx);
-
-  const rendered = await offlineCtx.startRendering();
-  const wav = audioBufferToWav(rendered);
-  const blob = new Blob([wav], { type: 'audio/wav' });
-  const url = URL.createObjectURL(blob);
+  const buf = await off.startRendering();
+  const wav = encWav(buf);
+  const url = URL.createObjectURL(new Blob([wav],{type:'audio/wav'}));
   const a = document.createElement('a');
   a.href = url;
-  a.download = `cryptchat-${TRACKS[currentTrackIdx].name.replace(/\s+/g,'-').toLowerCase()}.wav`;
+  a.download = `cryptchat-${TRACKS[trackIdx].name.replace(/\s+/g,'-').toLowerCase()}.wav`;
   a.click();
-  toast('Track downloaded as WAV!');
+  toast('✓ ' + TRACKS[trackIdx].name + '.wav downloaded!');
 }
 
-function buildTrackOffline(ctx, dest, idx) {
-  const makeOsc = (freq, type='sine', gain=0.15, detune=0) => {
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = type; osc.frequency.value = freq; osc.detune.value = detune;
-    g.gain.value = gain; osc.connect(g); g.connect(dest); osc.start();
-  };
-  const makeNoise = (gainVal=0.05, filterFreq=400) => {
-    const buf = ctx.createBuffer(1, ctx.sampleRate * 8, ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i=0;i<data.length;i++) data[i] = Math.random()*2-1;
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass'; filter.frequency.value = filterFreq;
-    const g = ctx.createGain(); g.gain.value = gainVal;
-    src.connect(filter); filter.connect(g); g.connect(dest); src.start();
-  };
-  if (idx===0){ makeOsc(40,'sine',0.3); makeOsc(80,'sine',0.12); makeNoise(0.015,200); }
-  else if(idx===1){ makeOsc(55,'sine',0.18); makeNoise(0.02,300); makeOsc(220,'square',0.06); }
-  else if(idx===2){ makeOsc(60,'sawtooth',0.08); makeNoise(0.04,800); makeOsc(90,'sine',0.1); }
-  else if(idx===3){ makeOsc(35,'sine',0.25); makeOsc(70,'sine',0.08); makeNoise(0.01,100); }
-  else { makeNoise(0.06,600); makeOsc(50,'sine',0.2); makeNoise(0.04,200); }
-}
-
-// WAV encoder
-function audioBufferToWav(buf) {
-  const numCh = buf.numberOfChannels;
-  const len = buf.length * numCh * 2 + 44;
-  const view = new DataView(new ArrayBuffer(len));
-  const writeStr = (o,s) => { for(let i=0;i<s.length;i++) view.setUint8(o+i,s.charCodeAt(i)); };
-  writeStr(0,'RIFF'); view.setUint32(4,len-8,true); writeStr(8,'WAVE');
-  writeStr(12,'fmt '); view.setUint32(16,16,true); view.setUint16(20,1,true);
-  view.setUint16(22,numCh,true); view.setUint32(24,buf.sampleRate,true);
-  view.setUint32(28,buf.sampleRate*numCh*2,true); view.setUint16(32,numCh*2,true);
-  view.setUint16(34,16,true); writeStr(36,'data'); view.setUint32(40,buf.length*numCh*2,true);
-  let off=44;
-  for(let i=0;i<buf.length;i++) {
-    for(let ch=0;ch<numCh;ch++) {
-      const s = buf.getChannelData(ch)[i];
-      const v = Math.max(-1,Math.min(1,s));
-      view.setInt16(off, v<0?v*0x8000:v*0x7FFF, true); off+=2;
-    }
+function encWav(buf) {
+  const ch=buf.numberOfChannels, len=buf.length*ch*2+44;
+  const dv=new DataView(new ArrayBuffer(len));
+  const ws=(o,s)=>{for(let i=0;i<s.length;i++)dv.setUint8(o+i,s.charCodeAt(i));};
+  ws(0,'RIFF');dv.setUint32(4,len-8,true);ws(8,'WAVE');
+  ws(12,'fmt ');dv.setUint32(16,16,true);dv.setUint16(20,1,true);
+  dv.setUint16(22,ch,true);dv.setUint32(24,buf.sampleRate,true);
+  dv.setUint32(28,buf.sampleRate*ch*2,true);dv.setUint16(32,ch*2,true);
+  dv.setUint16(34,16,true);ws(36,'data');dv.setUint32(40,buf.length*ch*2,true);
+  let o=44;
+  for(let i=0;i<buf.length;i++) for(let c=0;c<ch;c++){
+    const v=Math.max(-1,Math.min(1,buf.getChannelData(c)[i]));
+    dv.setInt16(o,v<0?v*0x8000:v*0x7FFF,true);o+=2;
   }
-  return view.buffer;
+  return dv.buffer;
 }
 
-/* ════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════
    HELPERS
-════════════════════════════════════════════════════ */
-function buf2hex(buf) {
-  return Array.from(buf).map(b => b.toString(16).padStart(2,'0')).join('');
-}
-function escHtml(s) {
-  if (!s) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+══════════════════════════════════════════════════════════ */
+function b2h(buf) { return Array.from(buf).map(b=>(b<16?'0':'')+b.toString(16)).join(''); }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function copyText(txt) {
+  navigator.clipboard.writeText(txt).then(()=>toast('📋 Copied!')).catch(()=>{
+    const el=document.createElement('textarea');
+    el.value=txt; document.body.appendChild(el); el.select();
+    document.execCommand('copy'); document.body.removeChild(el);
+    toast('📋 Copied!');
+  });
 }
 
-let toastTimer;
+let toastT;
 function toast(msg) {
   const el = document.getElementById('toast');
-  el.textContent = msg; el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+  el.textContent = msg; el.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(()=>el.classList.remove('on'), 2800);
 }
 
-// Enter key to send
-document.getElementById('msg-input')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && e.ctrlKey) sendMessage();
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.key==='Escape') { closeGallery(); closeLightbox(); closeAlgoInfo(); }
+  if (e.key==='Enter' && e.ctrlKey && document.activeElement.id==='msg-in') sendMsg();
+  if (e.key===' ' && e.target.tagName!=='INPUT' && e.target.tagName!=='TEXTAREA') {
+    e.preventDefault(); togglePlay();
+  }
 });
 
-// Keyboard ESC to close modals
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeGallery(); closeLightbox(); }
-});
+document.getElementById('msg-in').addEventListener('input', updateCharCount);
+
+// Auto-generate AES key on load
+pickAlgo('aes-gcm');
 </script>
 </body>
 </html>
