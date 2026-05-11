@@ -1,0 +1,15 @@
+orbit:
+  p: 10.0
+  e: 0.5
+  chi_r0: 0.0
+  phi0: 0.0
+
+physics:
+  eta: 1.0e-4
+  flux_model: baseline_pn
+  use_horizon_flux: false
+  rtol: 1.0e-10
+  atol: 1.0e-10
+
+t_max: 1.0e6
+n_points: 3000

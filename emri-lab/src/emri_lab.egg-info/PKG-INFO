@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: emri_lab
+Version: 0.1.0
+Summary: EMRI production simulation lab — adiabatic inspiral in (p,e) space
+Requires-Python: >=3.11
+Requires-Dist: numpy>=1.26
+Requires-Dist: scipy>=1.12
+Requires-Dist: pydantic>=2.0
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: matplotlib>=3.8
+Requires-Dist: streamlit>=1.30
+Provides-Extra: dev
+Requires-Dist: pytest>=8; extra == "dev"
+Requires-Dist: ruff; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
