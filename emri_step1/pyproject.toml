@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "emri-step1"
+version = "0.1.0"
+description = "EMRI Step 1: Geodesic motion of a test particle in Schwarzschild spacetime"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.12",
+    "sympy>=1.12",
+    "matplotlib>=3.8",
+    "plotly>=5.18",
+    "streamlit>=1.32",
+    "pydantic>=2.6",
+    "pandas>=2.2",
+    "pyyaml>=6.0",
+    "typer>=0.12",
+    "rich>=13.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.4",
+    "mypy>=1.9",
+    "jupyterlab>=4.1",
+    "ipykernel>=6.29",
+]
+
+[project.scripts]
+emri = "emri_step1.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/emri_step1"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"

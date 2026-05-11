@@ -1,0 +1,16 @@
+name: isco_circular
+description: "Circular orbit at ISCO r=6M (marginally stable)"
+
+orbit:
+  mode: circular
+  r0: 6.0
+  phi0: 0.0
+
+solver:
+  integrator: DOP853
+  tau_max: 500.0
+  rtol: 1.0e-10
+  atol: 1.0e-12
+  max_step: 0.5
+  n_output: 5000
+  stop_at_horizon: true
