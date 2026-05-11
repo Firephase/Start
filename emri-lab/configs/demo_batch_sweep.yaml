@@ -1,0 +1,14 @@
+base_orbit:
+  p: 12.0
+  e: 0.0
+
+base_physics:
+  eta: 1.0e-5
+  flux_model: baseline_pn
+
+sweep:
+  p: [8.0, 10.0, 12.0, 14.0, 16.0]
+  eta: [1.0e-5, 1.0e-4]
+
+t_max: 1.0e6
+n_points: 1000

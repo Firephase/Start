@@ -1,0 +1,19 @@
+orbit:
+  p: 12.0
+  e: 0.0
+  chi_r0: 0.0
+  phi0: 0.0
+
+physics:
+  eta: 1.0e-5
+  flux_model: baseline_pn
+  use_horizon_flux: false
+
+eob:
+  conservative_model: schwarzschild
+  include_horizon_flux: false
+  include_eccentricity: false
+  include_primary_spin: false
+
+t_max: 5.0e6
+n_points: 2000
