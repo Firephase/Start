@@ -1,0 +1,6 @@
+emri-android/.buildozer/
+emri-android/bin/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
