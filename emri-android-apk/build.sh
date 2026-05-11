@@ -39,6 +39,7 @@ echo "[3/6] Converting to DEX…"
 dx --dex --output=$OUT/dex/classes.dex $OUT/obj
 
 # 5. Package APK (resources + manifest)
+# -0 arsc: store resources.arsc uncompressed (required for Android 11+, API 30+)
 echo "[4/6] Packaging resources…"
 aapt package -f \
     -M AndroidManifest.xml \
@@ -46,17 +47,22 @@ aapt package -f \
     -I $PLATFORM \
     -F $OUT/apk_unsigned/emrilab.ap_ \
     --min-sdk-version 21 \
-    --target-sdk-version 33
+    --target-sdk-version 33 \
+    -0 arsc
 
-# 6. Add DEX to the APK
+# 6. Add DEX to the APK (store uncompressed with -0 so zipalign can align it)
 echo "[5/6] Adding DEX…"
 cp $OUT/apk_unsigned/emrilab.ap_ $OUT/apk_unsigned/emrilab.apk
 cd $OUT/dex
-zip -qj ../apk_unsigned/emrilab.apk classes.dex
+zip -qj0 ../apk_unsigned/emrilab.apk classes.dex
 cd - > /dev/null
 
-# 7. Sign with a release key
-echo "[6/6] Signing APK…"
+# 7. zipalign BEFORE signing (required for correct 4-byte alignment)
+echo "[6/7] Aligning APK (4-byte)…"
+zipalign -f 4 $OUT/apk_unsigned/emrilab.apk $OUT/apk_aligned.apk
+
+# 8. Sign with a release key
+echo "[7/7] Signing APK…"
 KEYSTORE=$OUT/emrilab.keystore
 if [ ! -f "$KEYSTORE" ]; then
     keytool -genkeypair -v \
@@ -75,16 +81,8 @@ $JAVA_HOME/bin/jarsigner \
     -storepass emrilab2024 \
     -keypass emrilab2024 \
     -signedjar $OUT/$APK_NAME \
-    $OUT/apk_unsigned/emrilab.apk \
+    $OUT/apk_aligned.apk \
     emrilab 2>&1 | grep -E "jar signed|Warning|error" || true
-
-# 8. Align (optional but recommended)
-if command -v zipalign &>/dev/null; then
-    mv $OUT/$APK_NAME $OUT/${APK_NAME}.unaligned
-    zipalign -v 4 $OUT/${APK_NAME}.unaligned $OUT/$APK_NAME > /dev/null
-    rm $OUT/${APK_NAME}.unaligned
-    echo "zipalign done"
-fi
 
 echo ""
 echo "=== Build successful ==="
