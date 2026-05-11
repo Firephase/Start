@@ -9,7 +9,7 @@ BUILD_TOOLS=$SDK/build-tools/debian
 JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-amd64}
 JAVAC=$JAVA_HOME/bin/javac
 OUT=build
-APK_NAME=emrilab-debug.apk
+APK_NAME=emrilab.apk
 
 echo "=== EMRI Lab APK build (pure Java / WebView) ==="
 
@@ -55,28 +55,28 @@ cd $OUT/dex
 zip -qj ../apk_unsigned/emrilab.apk classes.dex
 cd - > /dev/null
 
-# 7. Sign with a debug key
+# 7. Sign with a release key
 echo "[6/6] Signing APK…"
-KEYSTORE=$OUT/debug.keystore
+KEYSTORE=$OUT/emrilab.keystore
 if [ ! -f "$KEYSTORE" ]; then
     keytool -genkeypair -v \
         -keystore $KEYSTORE \
-        -alias androiddebugkey \
+        -alias emrilab \
         -keyalg RSA -keysize 2048 \
-        -validity 10000 \
-        -dname "CN=Android Debug,O=Android,C=US" \
-        -storepass android \
-        -keypass android 2>/dev/null
+        -validity 36500 \
+        -dname "CN=EMRI Lab,O=EMRILab,C=US" \
+        -storepass emrilab2024 \
+        -keypass emrilab2024 2>/dev/null
 fi
 
 $JAVA_HOME/bin/jarsigner \
     -verbose \
     -keystore $KEYSTORE \
-    -storepass android \
-    -keypass android \
+    -storepass emrilab2024 \
+    -keypass emrilab2024 \
     -signedjar $OUT/$APK_NAME \
     $OUT/apk_unsigned/emrilab.apk \
-    androiddebugkey 2>&1 | grep -E "jar signed|Warning|error" || true
+    emrilab 2>&1 | grep -E "jar signed|Warning|error" || true
 
 # 8. Align (optional but recommended)
 if command -v zipalign &>/dev/null; then
