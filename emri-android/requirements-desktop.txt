@@ -1,0 +1,6 @@
+# Desktop dev/test dependencies (not used in APK build)
+kivy>=2.3.0
+kivymd>=1.2.0
+numpy>=1.26
+matplotlib>=3.8
+kivy-garden-matplotlib>=0.1.0
