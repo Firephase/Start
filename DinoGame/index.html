@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Кувыркающиеся Динозаврики</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: linear-gradient(180deg, #87CEEB 0%, #87CEEB 60%, #90EE90 60%, #228B22 100%);
+      font-family: 'Segoe UI', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    #ui {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 24px;
+      z-index: 10;
+    }
+
+    .stat {
+      background: rgba(255,255,255,0.85);
+      border-radius: 12px;
+      padding: 8px 18px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #333;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+
+    #canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      color: #fff;
+    }
+
+    #overlay h1 {
+      font-size: 52px;
+      text-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      margin-bottom: 12px;
+    }
+
+    #overlay p {
+      font-size: 20px;
+      margin-bottom: 8px;
+      opacity: 0.9;
+    }
+
+    #overlay .hint {
+      font-size: 15px;
+      opacity: 0.65;
+      margin-bottom: 32px;
+    }
+
+    #startBtn {
+      background: linear-gradient(135deg, #ff6b35, #f7c59f);
+      border: none;
+      border-radius: 50px;
+      padding: 16px 48px;
+      font-size: 22px;
+      font-weight: 700;
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(255,107,53,0.5);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    #startBtn:hover {
+      transform: scale(1.07);
+      box-shadow: 0 10px 28px rgba(255,107,53,0.6);
+    }
+
+    #finalScore {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 24px;
+      color: #ffd700;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <div id="ui" style="display:none;">
+    <div class="stat">⭐ Очки: <span id="score">0</span></div>
+    <div class="stat">🏆 Рекорд: <span id="best">0</span></div>
+    <div class="stat">🦕 Динозаврики: <span id="dinos">1</span></div>
+  </div>
+
+  <div id="overlay">
+    <h1>🦕 Кувыркашки!</h1>
+    <p>Управляй кувыркающимися динозавриками</p>
+    <p class="hint">Клик / Тап — прыжок &nbsp;|&nbsp; Двойной клик — кувырок</p>
+    <div id="finalScore" style="display:none;"></div>
+    <button id="startBtn">Играть!</button>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
