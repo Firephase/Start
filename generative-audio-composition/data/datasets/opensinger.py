@@ -532,6 +532,170 @@ class OpenSingerDataset(Dataset):
     def get_singer_id(self, singer_name: str) -> int:
         return self._singer_to_id[singer_name]
 
+    # ------------------------------------------------------------------
+    # Public API aliases (spec-compatible names)
+    # ------------------------------------------------------------------
+
+    def _extract_features(self, audio: np.ndarray, sr: int) -> dict:
+        """
+        Public alias for ``_compute_features`` — extracts mel, F0, energy.
+
+        This version accepts a pre-loaded waveform instead of a file-path dict,
+        matching the interface described in the class docstring.
+
+        Parameters
+        ----------
+        audio : np.ndarray
+            Mono float32 waveform.
+        sr : int
+            Sample rate.
+
+        Returns
+        -------
+        dict with keys:
+            mel     : np.ndarray  (n_mels, T_frames)
+            f0      : np.ndarray  (T_frames,)
+            voiced  : np.ndarray  (T_frames,) bool
+            energy  : np.ndarray  (T_frames,)
+        """
+        mel = _extract_mel(
+            audio, sr,
+            n_mels=self.n_mels,
+            n_fft=self.n_fft,
+            hop_length=self.hop_length,
+            f_min=self.f_min,
+            f_max=self.f_max,
+        )
+        n_frames = mel.shape[1]
+
+        f0_arr = _extract_f0(audio, sr, hop_length=self.hop_length)
+        f0_arr = _align_length(f0_arr, n_frames)
+        voiced = (f0_arr > 0).astype(bool)
+
+        energy = _extract_energy(audio, hop_length=self.hop_length, n_fft=self.n_fft)
+        energy = _align_length(energy, n_frames)
+
+        return {
+            "mel": mel,
+            "f0": f0_arr,
+            "voiced": voiced,
+            "energy": energy,
+        }
+
+    def _load_phoneme_alignment(
+        self,
+        lab_path: "Path",
+    ) -> "Tuple[List[str], List[float]]":
+        """
+        Parse an MFA TextGrid or HTK .lab file into (phonemes, durations).
+
+        Delegates to the module-level ``_parse_textgrid`` for .TextGrid files,
+        and implements a simple HTK label reader for .lab files.
+
+        Parameters
+        ----------
+        lab_path : Path
+            Path to the alignment file (.TextGrid or .lab).
+
+        Returns
+        -------
+        tuple[list[str], list[float]]
+            ``(phoneme_list, duration_seconds)``  — duration per phoneme in
+            seconds (NOT in frames; convert with ``sr / hop_length`` downstream).
+        """
+        lab_path = Path(lab_path)
+        suffix = lab_path.suffix.lower()
+
+        if suffix in {".textgrid", ".TextGrid"}:
+            alignments = _parse_textgrid(lab_path)  # [(start, end, phoneme)]
+            phonemes = [ph for _, _, ph in alignments]
+            durations = [float(end - start) for start, end, _ in alignments]
+            return phonemes, durations
+
+        # HTK .lab format: start_100ns  end_100ns  phoneme
+        phonemes: List[str] = []
+        durations: List[float] = []
+        try:
+            lines = lab_path.read_text(encoding="utf-8").strip().splitlines()
+            for line in lines:
+                parts = line.split()
+                if len(parts) < 3:
+                    continue
+                try:
+                    start_raw = int(parts[0])
+                    end_raw = int(parts[1])
+                    ph = parts[2]
+                except ValueError:
+                    continue
+                # HTK units are 100 ns; convert to seconds
+                dur_sec = (end_raw - start_raw) * 1e-7
+                phonemes.append(ph)
+                durations.append(float(dur_sec))
+        except Exception as exc:
+            log.warning("Could not parse .lab file %s: %s", lab_path, exc)
+
+        return phonemes, durations
+
+    # ------------------------------------------------------------------
+    # Collate function
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def collate_fn(batch: "List[Dict[str, Any]]") -> "Dict[str, Any]":
+        """
+        Collate a list of samples from :meth:`__getitem__` into a padded batch.
+
+        Variable-length tensors (audio, mel, f0, energy, phonemes, duration)
+        are right-padded with zeros to the length of the longest element.
+        Fixed scalars (speaker_id) are stacked directly.
+
+        Parameters
+        ----------
+        batch : list[dict]
+            List of sample dicts returned by ``__getitem__``.
+
+        Returns
+        -------
+        dict
+            Padded batch tensors plus ``audio_lengths``, ``mel_lengths``,
+            and ``phoneme_lengths`` for attention masking.
+        """
+        import torch
+        import torch.nn.functional as F
+
+        def _pad_1d(tensors):
+            lengths = torch.tensor([t.shape[-1] for t in tensors], dtype=torch.long)
+            max_len = int(lengths.max().item())
+            padded = torch.stack([F.pad(t, (0, max_len - t.shape[-1])) for t in tensors])
+            return padded, lengths
+
+        def _pad_2d(tensors):
+            lengths = torch.tensor([t.shape[-1] for t in tensors], dtype=torch.long)
+            max_len = int(lengths.max().item())
+            padded = torch.stack([F.pad(t, (0, max_len - t.shape[-1])) for t in tensors])
+            return padded, lengths
+
+        audio_batch, audio_lengths = _pad_1d([s["audio"] for s in batch])
+        mel_batch, mel_lengths = _pad_2d([s["mel"] for s in batch])
+        f0_batch, _ = _pad_1d([s["f0"] for s in batch])
+        energy_batch, _ = _pad_1d([s["energy"] for s in batch])
+        ph_batch, ph_lengths = _pad_1d([s["phonemes"] for s in batch])
+        dur_batch, _ = _pad_1d([s["duration"] for s in batch])
+
+        return {
+            "audio": audio_batch,
+            "audio_lengths": audio_lengths,
+            "mel": mel_batch,
+            "mel_lengths": mel_lengths,
+            "f0": f0_batch,
+            "energy": energy_batch,
+            "phonemes": ph_batch.long(),
+            "phoneme_lengths": ph_lengths,
+            "duration": dur_batch,
+            "speaker_id": torch.stack([s["speaker_id"] for s in batch]),
+            "singer_id": [s["singer_id"] for s in batch],
+        }
+
 
 # ---------------------------------------------------------------------------
 # Helpers

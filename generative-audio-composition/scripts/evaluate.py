@@ -131,6 +131,45 @@ def compute_mcd(ref: np.ndarray, deg: np.ndarray, sr: int = SAMPLE_RATE, n_mfcc:
     return float(np.mean(mcd_per_frame))
 
 
+def compute_f0_rmse(ref_wav: np.ndarray, deg_wav: np.ndarray, sr: int = SAMPLE_RATE) -> float:
+    """
+    Root Mean Square Error of fundamental frequency (F0) in Hz.
+
+    Uses librosa's pyin estimator.  Returns NaN if voiced frames < 10.
+    Computes RMSE directly on Hz values over mutually voiced frames.
+
+    Args:
+        ref_wav: Reference waveform (mono float32).
+        deg_wav: Degraded/synthesised waveform (mono float32).
+        sr: Sample rate in Hz.
+
+    Returns:
+        F0 RMSE in Hz, or NaN if insufficient voiced frames.
+    """
+    import librosa
+
+    hop = F0_HOP
+    fmin, fmax = librosa.note_to_hz("C2"), librosa.note_to_hz("C7")
+
+    f0_ref, voiced_ref, _ = librosa.pyin(ref_wav, fmin=fmin, fmax=fmax, sr=sr, hop_length=hop, fill_na=0.0)
+    f0_deg, voiced_deg, _ = librosa.pyin(deg_wav, fmin=fmin, fmax=fmax, sr=sr, hop_length=hop, fill_na=0.0)
+
+    f0_ref = np.nan_to_num(f0_ref, nan=0.0)
+    f0_deg = np.nan_to_num(f0_deg, nan=0.0)
+
+    min_frames = min(len(f0_ref), len(f0_deg))
+    f0_ref, f0_deg = f0_ref[:min_frames], f0_deg[:min_frames]
+    voiced_ref, voiced_deg = voiced_ref[:min_frames], voiced_deg[:min_frames]
+
+    # Only evaluate on mutually voiced frames
+    mask = voiced_ref & voiced_deg
+    if mask.sum() < 10:
+        return float("nan")
+
+    diff = f0_ref[mask] - f0_deg[mask]
+    return float(np.sqrt(np.mean(diff ** 2)))
+
+
 def compute_f0_mae(ref_wav: np.ndarray, deg_wav: np.ndarray, sr: int = SAMPLE_RATE) -> float:
     """
     Mean Absolute Error of fundamental frequency (F0) in cents.
@@ -300,6 +339,7 @@ def evaluate(
     stoi_scores: list[float] = []
     sim_scores: list[float] = []
     f0_maes: list[float] = []
+    f0_rmses: list[float] = []
     wer_scores: list[float] = []
     mcd_scores: list[float] = []
 
@@ -336,6 +376,7 @@ def evaluate(
         stoi_scores.append(compute_stoi(ref_wav_native, syn_wav_native, sr=SAMPLE_RATE))
         sim_scores.append(compute_speaker_similarity(ref_wav_spk, syn_wav_spk, speaker_enc, device))
         f0_maes.append(compute_f0_mae(ref_wav_native, syn_wav_native, sr=SAMPLE_RATE))
+        f0_rmses.append(compute_f0_rmse(ref_wav_native, syn_wav_native, sr=SAMPLE_RATE))
         mcd_scores.append(compute_mcd(ref_wav_native, syn_wav_native, sr=SAMPLE_RATE))
         if ref_lyrics:
             wer_scores.append(compute_wer(ref_lyrics, syn_lyrics))
@@ -352,6 +393,7 @@ def evaluate(
         "stoi":               nanmean(stoi_scores),
         "speaker_similarity": nanmean(sim_scores),
         "f0_mae_cents":       nanmean(f0_maes),
+        "f0_rmse_hz":         nanmean(f0_rmses),
         "mcd_db":             nanmean(mcd_scores),
         "wer":                nanmean(wer_scores) if wer_scores else float("nan"),
         "n_samples":          len(pesq_scores),
@@ -381,6 +423,7 @@ def print_results_table(results: dict[str, float], checkpoint: str) -> None:
         ("STOI (eSTOI, ↑)",        results["stoi"],               "≥ 0.85"),
         ("Speaker Similarity (↑)", results["speaker_similarity"], "≥ 0.85"),
         ("F0 MAE / cents (↓)",     results["f0_mae_cents"],       "≤ 50"),
+        ("F0 RMSE / Hz (↓)",       results["f0_rmse_hz"],         "≤ 25"),
         ("MCD / dB (↓)",           results["mcd_db"],             "≤ 6.0"),
         ("WER (↓)",                results["wer"],                "≤ 0.10"),
     ]

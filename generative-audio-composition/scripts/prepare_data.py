@@ -113,6 +113,81 @@ def parse_args() -> argparse.Namespace:
 # =============================================================================
 
 
+# Datasets for which BPM/key extraction is appropriate (music, not singing)
+MUSIC_DATASETS = {"fma", "musdb18hq", "musdb", "mtg-jamendo", "gtzan"}
+
+# Datasets for which G2P / phoneme alignment is appropriate
+SINGING_DATASETS = {"opensinger", "vocalset"}
+
+
+def extract_bpm_and_key(wav: np.ndarray, sr: int = SAMPLE_RATE) -> dict[str, Any]:
+    """
+    Extract tempo (BPM) and musical key from an audio waveform.
+
+    Uses librosa for BPM estimation and the Krumhansl-Schmuckler algorithm
+    (via chroma CQT) for key detection.
+
+    Parameters
+    ----------
+    wav : np.ndarray
+        Mono float32 waveform.
+    sr : int
+        Sample rate.
+
+    Returns
+    -------
+    dict with keys:
+        ``bpm``         : float  – estimated tempo in BPM
+        ``key``         : str    – e.g. "G major"
+        ``mode``        : str    – "major" or "minor"
+        ``key_confidence`` : float – Pearson r in [0, 1]
+    """
+    import librosa
+
+    result: dict[str, Any] = {
+        "bpm": None,
+        "key": None,
+        "mode": None,
+        "key_confidence": None,
+    }
+
+    # BPM estimation
+    try:
+        tempo, _ = librosa.beat.beat_track(y=wav, sr=sr, units="time")
+        result["bpm"] = round(float(np.atleast_1d(tempo)[0]), 2)
+    except Exception as exc:
+        logger.debug("BPM extraction failed: %s", exc)
+
+    # Key estimation via Krumhansl-Schmuckler
+    try:
+        chroma = librosa.feature.chroma_cqt(y=wav, sr=sr, bins_per_octave=36)
+        chroma_mean = chroma.mean(axis=1)  # (12,)
+
+        KS_MAJOR = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
+        KS_MINOR = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+        NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+        best_r = -np.inf
+        best_root = 0
+        best_mode = "major"
+
+        for root in range(12):
+            r_maj = float(np.corrcoef(chroma_mean, np.roll(KS_MAJOR, root))[0, 1])
+            r_min = float(np.corrcoef(chroma_mean, np.roll(KS_MINOR, root))[0, 1])
+            if r_maj > best_r:
+                best_r, best_root, best_mode = r_maj, root, "major"
+            if r_min > best_r:
+                best_r, best_root, best_mode = r_min, root, "minor"
+
+        result["key"] = f"{NOTE_NAMES[best_root]} {best_mode}"
+        result["mode"] = best_mode
+        result["key_confidence"] = round(float(np.clip(best_r, 0.0, 1.0)), 4)
+    except Exception as exc:
+        logger.debug("Key detection failed: %s", exc)
+
+    return result
+
+
 def scan_dataset(dataset_dir: Path, dataset_name: str) -> list[dict[str, Any]]:
     """
     Recursively scan ``dataset_dir`` for audio files.
@@ -346,6 +421,14 @@ def _extract_features_for_record(
         except Exception as exc:
             logger.warning("Speaker embedding failed for %s: %s", audio_path, exc)
 
+    # BPM / key extraction for music datasets (not singing datasets)
+    bpm_info: dict[str, Any] = {}
+    if record.get("dataset", "") in MUSIC_DATASETS:
+        try:
+            bpm_info = extract_bpm_and_key(wav, sr=SAMPLE_RATE)
+        except Exception as exc:
+            logger.debug("BPM/key extraction failed for %s: %s", audio_path, exc)
+
     updated = {
         **record,
         "duration": round(duration, 3),
@@ -353,6 +436,7 @@ def _extract_features_for_record(
         "f0_path": str(f0_path),
         "energy_path": str(energy_path),
         "spk_path": str(spk_path) if spk_path.exists() else None,
+        **bpm_info,
     }
     return updated
 
@@ -557,7 +641,78 @@ def main() -> None:
     logger.info("Step 5: Writing manifests …")
     write_manifests(splits, manifest_dir)
 
+    # ── Statistics report ─────────────────────────────────────────────────────
+    _print_statistics(records, splits)
+
     logger.info("Data preparation complete.")
+
+
+def _print_statistics(
+    all_records: list[dict[str, Any]],
+    splits: dict[str, list[dict[str, Any]]],
+) -> None:
+    """Print a summary table of dataset statistics to stdout."""
+    SEP = "─" * 70
+
+    print(f"\n{SEP}")
+    print("  Dataset Preparation Statistics")
+    print(f"{SEP}")
+
+    # Per-dataset breakdown
+    by_dataset: dict[str, list[dict[str, Any]]] = {}
+    for rec in all_records:
+        ds = rec.get("dataset", "unknown")
+        by_dataset.setdefault(ds, []).append(rec)
+
+    print(f"\n  {'Dataset':<20} {'Files':>8} {'Hours':>8} {'Speakers':>10}")
+    print(f"  {'-'*20} {'-'*8} {'-'*8} {'-'*10}")
+
+    total_files = 0
+    total_hours = 0.0
+    for ds_name in sorted(by_dataset):
+        ds_recs = by_dataset[ds_name]
+        n_files = len(ds_recs)
+        hours = sum(r.get("duration", 0.0) for r in ds_recs) / 3600.0
+        n_speakers = len({r.get("speaker_id", "unknown") for r in ds_recs})
+        print(f"  {ds_name:<20} {n_files:>8d} {hours:>8.2f} {n_speakers:>10d}")
+        total_files += n_files
+        total_hours += hours
+
+    print(f"  {'TOTAL':<20} {total_files:>8d} {total_hours:>8.2f}")
+
+    # Split summary
+    print(f"\n{SEP}")
+    print("  Train / Val / Test Split")
+    print(f"{SEP}")
+    print(f"\n  {'Split':<10} {'Files':>8} {'Hours':>8}")
+    print(f"  {'-'*10} {'-'*8} {'-'*8}")
+
+    for split_name in ("train", "val", "test"):
+        sp_recs = splits.get(split_name, [])
+        n = len(sp_recs)
+        h = sum(r.get("duration", 0.0) for r in sp_recs) / 3600.0
+        print(f"  {split_name:<10} {n:>8d} {h:>8.2f}")
+
+    # BPM statistics for music datasets
+    music_recs = [r for r in all_records if r.get("dataset") in MUSIC_DATASETS and r.get("bpm")]
+    if music_recs:
+        bpms = np.array([r["bpm"] for r in music_recs], dtype=np.float32)
+        print(f"\n{SEP}")
+        print("  Music Metadata (BPM / Key)")
+        print(f"{SEP}")
+        print(f"\n  BPM stats: mean={bpms.mean():.1f}, std={bpms.std():.1f}, "
+              f"min={bpms.min():.1f}, max={bpms.max():.1f}")
+
+        key_counts: dict[str, int] = {}
+        for r in music_recs:
+            k = r.get("key", "unknown")
+            if k:
+                key_counts[k] = key_counts.get(k, 0) + 1
+
+        top_keys = sorted(key_counts.items(), key=lambda x: -x[1])[:5]
+        print(f"  Top keys: {', '.join(f'{k} ({v})' for k, v in top_keys)}")
+
+    print(f"\n{SEP}\n")
 
 
 if __name__ == "__main__":
