@@ -7,6 +7,10 @@ from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
+import librosa
+import soundfile as sf
+import torch
+import torchaudio
 
 log = logging.getLogger(__name__)
 
@@ -14,6 +18,16 @@ log = logging.getLogger(__name__)
 class AudioProcessor:
     """
     End-to-end audio preprocessing utility.
+
+    Class-level constant listing recognised file extensions.
+    """
+
+    SUPPORTED_FORMATS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac", ".opus"}
+
+    """
+    (Original docstring continues below)
+
+    End-to-end audio preprocessing utility (continued):
 
     Provides loading, resampling, silence trimming, mel spectrogram extraction,
     length normalization, and segmentation. All methods operate on NumPy arrays
