@@ -1,0 +1,159 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gac-api
+  labels:
+    app: gac-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gac-api
+  template:
+    metadata:
+      labels:
+        app: gac-api
+    spec:
+      containers:
+        - name: api
+          image: gac-api:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: GAC_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: gac-secrets
+                  key: redis-url
+            - name: GAC_DEVICE
+              value: "cpu"  # API pod doesn't need GPU
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1"
+            limits:
+              memory: "4Gi"
+              cpu: "2"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          volumeMounts:
+            - name: outputs
+              mountPath: /data/outputs
+            - name: uploads
+              mountPath: /data/uploads
+      volumes:
+        - name: outputs
+          persistentVolumeClaim:
+            claimName: gac-outputs-pvc
+        - name: uploads
+          emptyDir:
+            sizeLimit: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gac-worker
+  labels:
+    app: gac-worker
+spec:
+  replicas: 2  # Scale based on queue depth
+  selector:
+    matchLabels:
+      app: gac-worker
+  template:
+    metadata:
+      labels:
+        app: gac-worker
+    spec:
+      containers:
+        - name: worker
+          image: gac-worker:latest
+          env:
+            - name: GAC_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: gac-secrets
+                  key: redis-url
+            - name: GAC_DEVICE
+              value: "cuda"
+            - name: GAC_DIFFSINGER_PATH
+              value: /models/diffsinger/checkpoint_best.pt
+            - name: GAC_SPEAKER_ENCODER_PATH
+              value: /models/speaker_encoder/checkpoint_best.pt
+          resources:
+            requests:
+              memory: "24Gi"
+              cpu: "4"
+              nvidia.com/gpu: "1"
+            limits:
+              memory: "48Gi"
+              cpu: "8"
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+            - name: outputs
+              mountPath: /data/outputs
+            - name: uploads
+              mountPath: /data/uploads
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: gac-models-pvc
+        - name: outputs
+          persistentVolumeClaim:
+            claimName: gac-outputs-pvc
+        - name: uploads
+          emptyDir:
+            sizeLimit: 10Gi
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gac-api-svc
+spec:
+  selector:
+    app: gac-api
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gac-worker-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gac-worker
+  minReplicas: 1
+  maxReplicas: 8
+  metrics:
+    - type: External
+      external:
+        metric:
+          name: redis_queue_length
+          selector:
+            matchLabels:
+              queue: audio_generation
+        target:
+          type: AverageValue
+          averageValue: "3"

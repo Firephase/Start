@@ -1,0 +1,16 @@
+-r base.txt
+lightning==2.2.5
+datasets==2.19.2
+tokenizers==0.19.1
+sentencepiece==0.2.0
+pandas==2.2.2
+scikit-learn==1.5.0
+audiomentations==0.36.0
+torch-audiomentations==0.11.1
+pesq==0.0.4
+pystoi==0.3.3
+mir-eval==0.7
+pretty-midi==0.2.10
+music21==9.1.0
+numba==0.59.1
+jiwer==3.0.4

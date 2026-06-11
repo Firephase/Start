@@ -1,0 +1,21 @@
+model:
+  name: wavlm_ecapa
+  backbone: microsoft/wavlm-large
+  freeze_backbone_layers: 12  # freeze first 12 of 24 layers
+
+  # ECAPA-TDNN head
+  head:
+    channels: 512
+    emb_dim: 192
+    se_channels: 128
+    kernel_sizes: [5, 3, 3, 1]
+    dilations: [1, 2, 3, 1]
+
+  # Output embedding
+  embedding_dim: 256
+  normalize_embeddings: true
+
+audio:
+  sample_rate: 16000
+  max_duration: 30.0
+  min_duration: 1.0

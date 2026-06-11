@@ -1,0 +1,49 @@
+training:
+  experiment_name: diffsinger_v1
+  seed: 42
+
+  data:
+    train_datasets: [opensinger, vocalset, custom]
+    val_split: 0.05
+    batch_size: 16
+    num_workers: 8
+    max_audio_duration: 10.0
+
+  optimizer:
+    name: adamw
+    lr: 2.0e-4
+    betas: [0.9, 0.999]
+    eps: 1.0e-8
+    weight_decay: 0.01
+
+  scheduler:
+    name: cosine_with_warmup
+    warmup_steps: 5000
+    total_steps: 400000
+
+  training:
+    max_steps: 400000
+    gradient_clip: 1.0
+    gradient_accumulation: 4
+    precision: bf16
+
+  losses:
+    mel_loss_weight: 1.0
+    diffusion_loss_weight: 1.0
+    duration_loss_weight: 0.1
+    pitch_loss_weight: 0.1
+    energy_loss_weight: 0.1
+    speaker_loss_weight: 0.05  # contrastive speaker loss
+
+  checkpoint:
+    save_every_n_steps: 5000
+    keep_last_k: 5
+
+  logging:
+    use_wandb: true
+    log_every_n_steps: 100
+    val_every_n_steps: 2000
+
+  hardware:
+    num_gpus: 8
+    strategy: ddp

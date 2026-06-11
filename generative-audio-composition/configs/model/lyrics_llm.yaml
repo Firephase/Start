@@ -1,0 +1,17 @@
+model:
+  name: lyrics_llm
+  base_model: meta-llama/Meta-Llama-3.1-8B-Instruct
+
+  finetune:
+    strategy: qlora
+    load_in_4bit: true
+    lora_r: 64
+    lora_alpha: 128
+    lora_dropout: 0.05
+    target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+
+  generation:
+    max_new_tokens: 1024
+    temperature: 0.8
+    top_p: 0.95
+    repetition_penalty: 1.2

@@ -1,0 +1,35 @@
+training:
+  experiment_name: speaker_encoder_v1
+  seed: 42
+
+  data:
+    train_datasets: [voxceleb2, librispeech, vocalset]
+    val_split: 0.05
+    batch_size: 64
+    num_workers: 8
+    utterances_per_speaker: 10
+    frames_per_utterance: 180
+
+  optimizer:
+    name: adamw
+    lr: 1.0e-3
+    weight_decay: 0.01
+
+  scheduler:
+    name: cosine_with_warmup
+    warmup_steps: 2000
+    total_steps: 150000
+
+  loss:
+    name: generalized_end_to_end
+    init_w: 10.0
+    init_b: -5.0
+
+  training:
+    max_steps: 150000
+    gradient_clip: 3.0
+    precision: bf16
+
+  hardware:
+    num_gpus: 4
+    strategy: ddp

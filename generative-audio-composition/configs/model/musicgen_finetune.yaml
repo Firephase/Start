@@ -1,0 +1,28 @@
+model:
+  name: musicgen_finetune
+  base_model: facebook/musicgen-large  # 3.3B params
+
+  finetune:
+    strategy: lora
+    lora_r: 16
+    lora_alpha: 32
+    lora_dropout: 0.05
+    target_modules: [q_proj, v_proj, k_proj, out_proj]
+
+  conditioning:
+    use_text: true
+    use_melody: true
+    use_chords: true
+    melody_dim: 128
+    chord_vocab_size: 73  # 12 roots * 6 types + no-chord
+
+  generation:
+    duration: 240  # max 4 min
+    top_k: 250
+    top_p: 0.0
+    temperature: 1.0
+    cfg_coef: 3.0
+
+audio:
+  sample_rate: 32000
+  segment_duration: 30.0

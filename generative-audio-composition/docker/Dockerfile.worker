@@ -1,0 +1,92 @@
+FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
+
+# ── Build args ────────────────────────────────────────────────────────────────
+ARG PYTHON_VERSION=3.11
+
+# ── Environment ───────────────────────────────────────────────────────────────
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    # CUDA / GPU settings
+    CUDA_HOME=/usr/local/cuda \
+    TORCH_CUDA_ARCH_LIST="7.0;7.5;8.0;8.6;8.9;9.0" \
+    FORCE_CUDA=1 \
+    # Avoid HuggingFace tokenizers fork-warning in Celery workers
+    TOKENIZERS_PARALLELISM=false
+
+# ── System dependencies ───────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        # Python
+        python${PYTHON_VERSION} \
+        python${PYTHON_VERSION}-dev \
+        python${PYTHON_VERSION}-venv \
+        python3-pip \
+        # Audio processing
+        ffmpeg \
+        libsndfile1 \
+        libsndfile1-dev \
+        libsox-fmt-all \
+        sox \
+        # Phoneme backend
+        espeak-ng \
+        espeak-ng-data \
+        # CUDA build dependencies
+        ninja-build \
+        cmake \
+        # Build tools
+        build-essential \
+        git \
+        wget \
+        curl \
+        ca-certificates \
+        # Shared memory utilities (useful for large tensor transfer)
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Make python3.11 the default python
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1 \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1 \
+    && update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+
+# ── Working directory ─────────────────────────────────────────────────────────
+WORKDIR /app
+
+# ── Python dependencies ───────────────────────────────────────────────────────
+COPY requirements/base.txt requirements/base.txt
+COPY requirements/worker.txt requirements/worker.txt
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install -r requirements/base.txt \
+    && pip install -r requirements/worker.txt
+
+# ── Application code ──────────────────────────────────────────────────────────
+COPY api/ api/
+COPY core/ core/
+COPY models/ models/
+
+# ── Runtime directories ───────────────────────────────────────────────────────
+RUN mkdir -p /tmp/audio_uploads /tmp/audio_outputs /app/models
+
+# ── Non-root user ─────────────────────────────────────────────────────────────
+RUN groupadd --gid 1000 appuser \
+    && useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser \
+    && chown -R appuser:appuser /app /tmp/audio_uploads /tmp/audio_outputs
+USER appuser
+
+# ── GPU health check ──────────────────────────────────────────────────────────
+# Celery workers are ready when they respond to ping; use that instead of HTTP
+HEALTHCHECK --interval=60s --timeout=30s --start-period=60s --retries=3 \
+    CMD celery -A api.workers.tasks inspect ping -d celery@$$HOSTNAME || exit 1
+
+# ── Entrypoint ────────────────────────────────────────────────────────────────
+# --concurrency=1  →  one GPU job at a time per worker container
+# -Q audio_generation  →  dedicated queue so API tasks don't accidentally run here
+CMD ["celery", \
+     "-A", "api.workers.tasks", \
+     "worker", \
+     "--loglevel=info", \
+     "--concurrency=1", \
+     "-Q", "audio_generation", \
+     "--hostname=worker@%h"]

@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "generative-audio-composition"
+version = "1.0.0"
+description = "Transform amateur vocal recordings into professional music tracks"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = []  # managed by requirements/
+
+[project.scripts]
+gac-api = "api.main:main"
+gac-worker = "api.workers.tasks:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_return_any = false
