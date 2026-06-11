@@ -340,6 +340,140 @@ class AudioAugmenter:
         return processed.astype(np.float32)
 
     # ------------------------------------------------------------------
+    # Parametric EQ
+    # ------------------------------------------------------------------
+
+    def apply_eq(
+        self,
+        audio: np.ndarray,
+        sr: int,
+        gain_db_range: Tuple[float, float] = (-6.0, 6.0),
+        n_bands: int = 3,
+    ) -> np.ndarray:
+        """
+        Apply a random parametric EQ: random boosts/cuts at random frequencies.
+
+        For each of ``n_bands`` bands, a second-order peaking filter is applied
+        at a random centre frequency with a random gain in [min_db, max_db] dB
+        and a random Q factor in [0.5, 4.0].
+
+        Args:
+            audio: Mono float32 waveform (T,).
+            sr: Sample rate in Hz.
+            gain_db_range: (min_gain_db, max_gain_db). Negative = cut, positive = boost.
+            n_bands: Number of independently randomised EQ bands.
+
+        Returns:
+            EQ-processed waveform (T,), float32.
+        """
+        try:
+            from scipy.signal import sosfilt, iirpeak, butter
+        except ImportError:
+            log.warning("scipy is required for apply_eq; returning original audio.")
+            return audio.copy()
+
+        result = audio.astype(np.float32).copy()
+        nyq = sr / 2.0
+
+        for _ in range(n_bands):
+            gain_db = self._rng.uniform(*gain_db_range)
+            if abs(gain_db) < 0.5:
+                continue  # Skip near-zero gains
+
+            # Random centre frequency: 100 Hz – 8000 Hz (or sr/2 - margin)
+            f_max = min(8000.0, nyq * 0.95)
+            f_center = self._rng.uniform(100.0, max(101.0, f_max))
+            Q = self._rng.uniform(0.5, 4.0)
+
+            # Peaking EQ via scipy bilinear transform approach
+            # Use IIR biquad peaking filter coefficients manually
+            w0 = 2 * np.pi * f_center / sr
+            A = 10.0 ** (gain_db / 40.0)  # sqrt of linear amplitude gain
+            alpha = np.sin(w0) / (2.0 * Q)
+
+            b0 = 1.0 + alpha * A
+            b1 = -2.0 * np.cos(w0)
+            b2 = 1.0 - alpha * A
+            a0 = 1.0 + alpha / A
+            a1 = -2.0 * np.cos(w0)
+            a2 = 1.0 - alpha / A
+
+            # Normalise by a0
+            b = np.array([b0 / a0, b1 / a0, b2 / a0])
+            a = np.array([1.0, a1 / a0, a2 / a0])
+
+            # Convert to SOS format for numerical stability
+            sos = np.array([[b[0], b[1], b[2], 1.0, a[1], a[2]]])
+            result = sosfilt(sos, result).astype(np.float32)
+
+        # Normalise to prevent clipping
+        peak = np.abs(result).max()
+        if peak > 1.0:
+            result = result / peak
+
+        return result.astype(np.float32)
+
+    def add_microphone_effect(
+        self,
+        audio: np.ndarray,
+        sr: int,
+    ) -> np.ndarray:
+        """
+        Simulate a cheap microphone: bandwidth-limit to 100–8000 Hz plus slight resonance.
+
+        Applies a bandpass filter (100 Hz – 8000 Hz, or Nyquist if sr is low)
+        followed by a resonance peak around 2–4 kHz to mimic the characteristic
+        colouration of budget dynamic/electret microphones.
+
+        Args:
+            audio: Mono float32 waveform (T,).
+            sr: Sample rate in Hz.
+
+        Returns:
+            Processed waveform (T,), float32.
+        """
+        try:
+            from scipy.signal import butter, sosfilt
+        except ImportError:
+            log.warning("scipy is required for add_microphone_effect; returning original.")
+            return audio.copy()
+
+        nyq = sr / 2.0
+        lo_hz = 100.0
+        hi_hz = min(8000.0, nyq * 0.95)
+
+        if lo_hz >= hi_hz:
+            return audio.copy()
+
+        # Bandpass filter
+        lo_norm = lo_hz / nyq
+        hi_norm = hi_hz / nyq
+        sos_bp = butter(4, [lo_norm, hi_norm], btype="bandpass", output="sos")
+        processed = sosfilt(sos_bp, audio.astype(np.float32)).astype(np.float32)
+
+        # Slight resonance peak at 2–4 kHz (microphone "presence rise")
+        res_freq = self._rng.uniform(2000.0, min(4000.0, hi_hz))
+        Q_res = self._rng.uniform(1.5, 3.0)
+        w0 = 2 * np.pi * res_freq / sr
+        A_res = 10.0 ** (self._rng.uniform(1.0, 3.0) / 40.0)  # 1–3 dB boost
+        alpha = np.sin(w0) / (2.0 * Q_res)
+
+        b0 = 1.0 + alpha * A_res
+        b1 = -2.0 * np.cos(w0)
+        b2 = 1.0 - alpha * A_res
+        a0 = 1.0 + alpha / A_res
+        a1 = -2.0 * np.cos(w0)
+        a2 = 1.0 - alpha / A_res
+
+        sos_peak = np.array([[b0 / a0, b1 / a0, b2 / a0, 1.0, a1 / a0, a2 / a0]])
+        processed = sosfilt(sos_peak, processed).astype(np.float32)
+
+        # Soft-clip to simulate capsule saturation
+        processed = np.tanh(1.2 * processed) / np.tanh(1.2)
+
+        return processed.astype(np.float32)
+
+    # ------------------------------------------------------------------
     # Gain / volume
     # ------------------------------------------------------------------
 
@@ -430,6 +564,8 @@ class AudioAugmenter:
                 "add_room_reverb",
                 "pitch_shift",
                 "time_stretch",
+                "apply_eq",
+                "add_microphone_effect",
                 "apply_microphone_effect",
                 "random_gain",
                 "polarity_inversion",
