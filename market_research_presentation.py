@@ -1,844 +1,590 @@
 #!/usr/bin/env python3
-"""Generate market research PDF presentation for Generative Audio Composition project."""
+"""Generate market research PDF presentation — Cyrillic-safe with Liberation Sans."""
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
-from reportlab.lib.units import mm, cm
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    HRFlowable, PageBreak, KeepTogether
+    HRFlowable, PageBreak,
 )
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.graphics.shapes import Drawing, Rect, String, Line
-from reportlab.graphics.charts.barcharts import VerticalBarChart
-from reportlab.graphics import renderPDF
-import os
 
-# ── Color palette ───────────────────────────────────────────────────────────
-DARK_BG     = colors.HexColor("#0D0D0D")
-ACCENT      = colors.HexColor("#7C3AED")   # violet
-ACCENT2     = colors.HexColor("#06B6D4")   # cyan
-ACCENT3     = colors.HexColor("#10B981")   # emerald
-ACCENT_WARN = colors.HexColor("#F59E0B")   # amber
-ACCENT_RED  = colors.HexColor("#EF4444")   # red
-TEXT_MAIN   = colors.HexColor("#F1F5F9")
-TEXT_MUTED  = colors.HexColor("#94A3B8")
-CARD_BG     = colors.HexColor("#1E1E2E")
-CARD_BORDER = colors.HexColor("#334155")
-WHITE       = colors.white
-PAGE_BG     = colors.HexColor("#0F0F1A")
+# ── Register Unicode fonts (Cyrillic-capable) ────────────────────────────────
+FONT_DIR = "/usr/share/fonts/truetype/liberation"
+pdfmetrics.registerFont(TTFont("Reg",    f"{FONT_DIR}/LiberationSans-Regular.ttf"))
+pdfmetrics.registerFont(TTFont("Bold",   f"{FONT_DIR}/LiberationSans-Bold.ttf"))
+pdfmetrics.registerFont(TTFont("Italic", f"{FONT_DIR}/LiberationSans-Italic.ttf"))
+pdfmetrics.registerFont(TTFont("BoldIt", f"{FONT_DIR}/LiberationSans-BoldItalic.ttf"))
+from reportlab.pdfbase.pdfmetrics import registerFontFamily
+registerFontFamily("Lib", normal="Reg", bold="Bold", italic="Italic", boldItalic="BoldIt")
 
-W, H = A4  # 595 x 842 pt
+# ── Palette ──────────────────────────────────────────────────────────────────
+C_BG      = colors.HexColor("#0F0F1A")
+C_CARD    = colors.HexColor("#1A1A2E")
+C_BORDER  = colors.HexColor("#2D3748")
+C_ACCENT  = colors.HexColor("#7C3AED")   # violet
+C_CYAN    = colors.HexColor("#06B6D4")
+C_GREEN   = colors.HexColor("#10B981")
+C_AMBER   = colors.HexColor("#F59E0B")
+C_RED     = colors.HexColor("#EF4444")
+C_PINK    = colors.HexColor("#EC4899")
+C_WHITE   = colors.white
+C_TEXT    = colors.HexColor("#E2E8F0")
+C_MUTED   = colors.HexColor("#94A3B8")
+C_STRIPE  = colors.HexColor("#16213E")
 
-OUTPUT_PATH = "/home/user/Start/market_research.pdf"
+W, H = A4
+OUTPUT = "/home/user/Start/market_research.pdf"
 
-# ── Style helpers ────────────────────────────────────────────────────────────
-def style(name, **kw):
-    base = getSampleStyleSheet()
-    return ParagraphStyle(name, parent=base["Normal"], **kw)
+# ── Style factory ────────────────────────────────────────────────────────────
+def S(name, font="Reg", size=10, color=C_TEXT, align=TA_LEFT,
+      leading=None, space_before=0, space_after=4,
+      left_indent=0, first_indent=0):
+    return ParagraphStyle(
+        name,
+        fontName=font,
+        fontSize=size,
+        textColor=color,
+        alignment=align,
+        leading=leading or size * 1.4,
+        spaceBefore=space_before,
+        spaceAfter=space_after,
+        leftIndent=left_indent,
+        firstLineIndent=first_indent,
+    )
 
-S_SLIDE_TITLE = style("SlideTitle",
-    fontName="Helvetica-Bold", fontSize=28, textColor=WHITE,
-    spaceAfter=4, spaceBefore=0, leading=34)
+# Pre-built styles
+s_slide_title   = S("st",  "Bold",   30, C_WHITE,   TA_LEFT,  38,  0,  6)
+s_slide_sub     = S("ss",  "Reg",    13, C_CYAN,    TA_LEFT,  17,  0, 14)
+s_section       = S("sec", "Bold",   18, C_ACCENT,  TA_LEFT,  24, 10,  6)
+s_subsection    = S("sub", "Bold",   12, C_CYAN,    TA_LEFT,  16,  8,  4)
+s_body          = S("bod", "Reg",    10, C_TEXT,    TA_JUSTIFY,14, 2,  4)
+s_bullet        = S("bul", "Reg",    10, C_TEXT,    TA_LEFT,  14,  2,  3, 14, -10)
+s_bullet2       = S("bl2", "Reg",     9, C_MUTED,   TA_LEFT,  13,  1,  2, 26, -10)
+s_caption       = S("cap", "Italic",  8, C_MUTED,   TA_CENTER,11,  2,  2)
+s_footer        = S("ftr", "Reg",     7, C_MUTED,   TA_CENTER,10,  0,  0)
+s_faq_q         = S("fqq", "Bold",   11, C_AMBER,   TA_LEFT,  15,  8,  3)
+s_faq_a         = S("fqa", "Reg",    10, C_TEXT,    TA_JUSTIFY,14, 2,  6, 12)
+s_note          = S("not", "Italic",  8, C_MUTED,   TA_JUSTIFY,12, 4,  2)
 
-S_SLIDE_SUBTITLE = style("SlideSubtitle",
-    fontName="Helvetica", fontSize=13, textColor=ACCENT2,
-    spaceAfter=14, spaceBefore=0, leading=17)
+def sc(name, **kw): return S(name, **kw)   # shortcut
 
-S_SECTION = style("Section",
-    fontName="Helvetica-Bold", fontSize=17, textColor=ACCENT,
-    spaceAfter=6, spaceBefore=10, leading=22)
+# ── Helpers ───────────────────────────────────────────────────────────────────
+def vs(n=6):   return Spacer(1, n)
+def hr(c=C_ACCENT, t=1):
+    return HRFlowable(width="100%", thickness=t, color=c, spaceAfter=8, spaceBefore=4)
 
-S_SUBSECTION = style("Subsection",
-    fontName="Helvetica-Bold", fontSize=12, textColor=ACCENT2,
-    spaceAfter=4, spaceBefore=8, leading=16)
+def p(text, style): return Paragraph(text, style)
 
-S_BODY = style("Body",
-    fontName="Helvetica", fontSize=10, textColor=TEXT_MAIN,
-    spaceAfter=4, spaceBefore=2, leading=15, alignment=TA_JUSTIFY)
+def bul(text, sub=False):
+    prefix = "◆ " if not sub else "  › "
+    return Paragraph(prefix + text, s_bullet if not sub else s_bullet2)
 
-S_BULLET = style("Bullet",
-    fontName="Helvetica", fontSize=10, textColor=TEXT_MAIN,
-    spaceAfter=3, spaceBefore=1, leading=14,
-    leftIndent=14, firstLineIndent=-10)
+def cell(text, font="Reg", size=9, color=C_TEXT, align=TA_CENTER, leading=None):
+    return Paragraph(text, S("_c", font, size, color, align, leading))
 
-S_BULLET2 = style("Bullet2",
-    fontName="Helvetica", fontSize=9, textColor=TEXT_MUTED,
-    spaceAfter=2, spaceBefore=1, leading=13,
-    leftIndent=28, firstLineIndent=-10)
-
-S_CAPTION = style("Caption",
-    fontName="Helvetica-Oblique", fontSize=8, textColor=TEXT_MUTED,
-    spaceAfter=2, spaceBefore=2, leading=11, alignment=TA_CENTER)
-
-S_METRIC_BIG = style("MetricBig",
-    fontName="Helvetica-Bold", fontSize=26, textColor=ACCENT2,
-    spaceAfter=2, spaceBefore=2, leading=30, alignment=TA_CENTER)
-
-S_METRIC_LABEL = style("MetricLabel",
-    fontName="Helvetica", fontSize=9, textColor=TEXT_MUTED,
-    spaceAfter=0, spaceBefore=0, leading=12, alignment=TA_CENTER)
-
-S_TAG = style("Tag",
-    fontName="Helvetica-Bold", fontSize=8, textColor=ACCENT,
-    spaceAfter=0, spaceBefore=0, leading=10, alignment=TA_CENTER)
-
-S_QUOTE = style("Quote",
-    fontName="Helvetica-Oblique", fontSize=10, textColor=ACCENT2,
-    spaceAfter=6, spaceBefore=6, leading=15, leftIndent=16,
-    borderPad=8, alignment=TA_LEFT)
-
-S_FOOTER = style("Footer",
-    fontName="Helvetica", fontSize=7, textColor=TEXT_MUTED,
-    leading=9, alignment=TA_CENTER)
-
-S_PAGE_NUM = style("PageNum",
-    fontName="Helvetica-Bold", fontSize=9, textColor=ACCENT,
-    leading=11, alignment=TA_RIGHT)
-
-S_FAQ_Q = style("FAQQ",
-    fontName="Helvetica-Bold", fontSize=11, textColor=ACCENT_WARN,
-    spaceAfter=3, spaceBefore=8, leading=15)
-
-S_FAQ_A = style("FAQA",
-    fontName="Helvetica", fontSize=10, textColor=TEXT_MAIN,
-    spaceAfter=6, spaceBefore=2, leading=14, leftIndent=12, alignment=TA_JUSTIFY)
-
-S_RISK_HIGH = style("RiskH",
-    fontName="Helvetica-Bold", fontSize=10, textColor=ACCENT_RED,
-    spaceAfter=2, spaceBefore=4, leading=14)
-
-S_RISK_MED = style("RiskM",
-    fontName="Helvetica-Bold", fontSize=10, textColor=ACCENT_WARN,
-    spaceAfter=2, spaceBefore=4, leading=14)
-
-S_RISK_LOW = style("RiskL",
-    fontName="Helvetica-Bold", fontSize=10, textColor=ACCENT3,
-    spaceAfter=2, spaceBefore=4, leading=14)
-
-# ── Reusable components ──────────────────────────────────────────────────────
-
-def hr(color=ACCENT, width=1):
-    return HRFlowable(width="100%", thickness=width, color=color, spaceAfter=8, spaceBefore=4)
-
-def vspace(n=6):
-    return Spacer(1, n)
-
-def b(text, color=ACCENT2):
-    return f'<font color="{color.hexval()}" name="Helvetica-Bold">{text}</font>'
-
-def bullet(text, indent=0):
-    prefix = "◆ " if indent == 0 else "  › "
-    return Paragraph(f"{prefix}{text}", S_BULLET if indent == 0 else S_BULLET2)
-
-def metric_card(value, label, color=ACCENT2):
-    data = [
-        [Paragraph(value, ParagraphStyle("mv", fontName="Helvetica-Bold",
-            fontSize=22, textColor=color, leading=26, alignment=TA_CENTER))],
-        [Paragraph(label, S_METRIC_LABEL)],
+def tbl(data, col_widths, style_cmds=None):
+    t = Table(data, colWidths=col_widths)
+    base = [
+        ("BACKGROUND",   (0,0),(-1,-1), C_CARD),
+        ("GRID",         (0,0),(-1,-1), 0.4, C_BORDER),
+        ("TOPPADDING",   (0,0),(-1,-1), 6),
+        ("BOTTOMPADDING",(0,0),(-1,-1), 6),
+        ("LEFTPADDING",  (0,0),(-1,-1), 7),
+        ("RIGHTPADDING", (0,0),(-1,-1), 7),
+        ("VALIGN",       (0,0),(-1,-1), "MIDDLE"),
     ]
-    t = Table(data, colWidths=[None])
+    if style_cmds:
+        base += style_cmds
+    t.setStyle(TableStyle(base))
+    return t
+
+def header_tbl(headers, rows, widths, accent=C_ACCENT):
+    """Table with colored header row."""
+    h_row = [cell(h, "Bold", 9, C_WHITE, TA_CENTER) for h in headers]
+    all_rows = [h_row] + rows
+    extra = [
+        ("BACKGROUND",    (0,0),(-1,0),   accent),
+        ("ROWBACKGROUNDS",(0,1),(-1,-1),  [C_CARD, C_STRIPE]),
+    ]
+    return tbl(all_rows, widths, extra)
+
+def metric_box(value, label, color=C_CYAN):
+    inner = [
+        [cell(value, "Bold", 20, color, TA_CENTER)],
+        [cell(label, "Reg",   8, C_MUTED, TA_CENTER)],
+    ]
+    t = Table(inner)
     t.setStyle(TableStyle([
-        ("BACKGROUND",  (0,0), (-1,-1), CARD_BG),
-        ("BOX",         (0,0), (-1,-1), 0.8, color),
-        ("TOPPADDING",  (0,0), (-1,-1), 10),
-        ("BOTTOMPADDING",(0,0),(-1,-1),10),
-        ("LEFTPADDING", (0,0), (-1,-1), 8),
-        ("RIGHTPADDING",(0,0), (-1,-1), 8),
+        ("BACKGROUND",   (0,0),(-1,-1), C_CARD),
+        ("BOX",          (0,0),(-1,-1), 1, color),
+        ("TOPPADDING",   (0,0),(-1,-1), 10),
+        ("BOTTOMPADDING",(0,0),(-1,-1), 10),
+        ("LEFTPADDING",  (0,0),(-1,-1), 8),
+        ("RIGHTPADDING", (0,0),(-1,-1), 8),
     ]))
     return t
 
 def metrics_row(items):
-    """items = list of (value, label, color)"""
-    cells = [[metric_card(v, l, c) for v, l, c in items]]
-    n = len(items)
-    cw = (W - 80) / n
-    t = Table(cells, colWidths=[cw]*n, hAlign="LEFT")
+    cw = (W - 80) / len(items)
+    cells = [[metric_box(v, l, c) for v, l, c in items]]
+    t = Table(cells, colWidths=[cw]*len(items))
     t.setStyle(TableStyle([
-        ("VALIGN",  (0,0), (-1,-1), "TOP"),
-        ("LEFTPADDING",  (0,0), (-1,-1), 4),
-        ("RIGHTPADDING", (0,0), (-1,-1), 4),
-        ("TOPPADDING",   (0,0), (-1,-1), 0),
-        ("BOTTOMPADDING",(0,0), (-1,-1), 0),
+        ("VALIGN",        (0,0),(-1,-1), "TOP"),
+        ("LEFTPADDING",   (0,0),(-1,-1), 3),
+        ("RIGHTPADDING",  (0,0),(-1,-1), 3),
+        ("TOPPADDING",    (0,0),(-1,-1), 0),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 0),
     ]))
     return t
 
-def section_header(title, subtitle=""):
-    items = [Paragraph(title, S_SECTION)]
-    if subtitle:
-        items.append(Paragraph(subtitle, S_SLIDE_SUBTITLE))
-    items.append(hr())
-    return items
+def section_hdr(title, sub=""):
+    out = [p(title, s_section)]
+    if sub:
+        out.append(p(sub, s_slide_sub))
+    out.append(hr())
+    return out
 
-def colored_table(headers, rows, col_widths=None, accent=ACCENT):
-    data = [headers] + rows
-    n_cols = len(headers)
-    if col_widths is None:
-        col_widths = [(W - 80) / n_cols] * n_cols
-    t = Table(data, colWidths=col_widths, repeatRows=1)
-    style_cmds = [
-        ("BACKGROUND",    (0,0), (-1,0),  accent),
-        ("TEXTCOLOR",     (0,0), (-1,0),  WHITE),
-        ("FONTNAME",      (0,0), (-1,0),  "Helvetica-Bold"),
-        ("FONTSIZE",      (0,0), (-1,0),  9),
-        ("ALIGN",         (0,0), (-1,0),  "CENTER"),
-        ("BACKGROUND",    (0,1), (-1,-1), CARD_BG),
-        ("TEXTCOLOR",     (0,1), (-1,-1), TEXT_MAIN),
-        ("FONTNAME",      (0,1), (-1,-1), "Helvetica"),
-        ("FONTSIZE",      (0,1), (-1,-1), 9),
-        ("GRID",          (0,0), (-1,-1), 0.4, CARD_BORDER),
-        ("ROWBACKGROUNDS",(0,1), (-1,-1), [CARD_BG, colors.HexColor("#16213E")]),
-        ("TOPPADDING",    (0,0), (-1,-1), 5),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-        ("LEFTPADDING",   (0,0), (-1,-1), 7),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 7),
-        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
-    ]
-    t.setStyle(TableStyle(style_cmds))
-    return t
+# ── Page canvas callback (background + stripe) ───────────────────────────────
+def on_page(canvas, doc):
+    canvas.saveState()
+    canvas.setFillColor(C_BG)
+    canvas.rect(0, 0, W, H, fill=1, stroke=0)
+    canvas.setFillColor(C_ACCENT)
+    canvas.rect(0, H - 5, W, 5, fill=1, stroke=0)
+    if doc.page > 1:
+        canvas.setFont("Reg", 7)
+        canvas.setFillColor(C_MUTED)
+        canvas.drawString(30, 16, "Generative Audio Composition  ·  Market Research 2025")
+        canvas.setFont("Bold", 9)
+        canvas.setFillColor(C_ACCENT)
+        canvas.drawRightString(W - 28, 16, f"{doc.page - 1} / 9")
+    canvas.restoreState()
 
-def title_slide():
-    """Cover page."""
-    elems = []
-    elems.append(vspace(60))
-    # Badge
-    badge_data = [[Paragraph("MARKET RESEARCH  ·  2025–2026", style("badge",
-        fontName="Helvetica-Bold", fontSize=8, textColor=ACCENT,
-        leading=10, alignment=TA_CENTER))]]
-    badge = Table(badge_data, colWidths=[200])
-    badge.setStyle(TableStyle([
-        ("BACKGROUND",   (0,0),(-1,-1), colors.HexColor("#1A0040")),
-        ("BOX",          (0,0),(-1,-1), 1, ACCENT),
-        ("TOPPADDING",   (0,0),(-1,-1), 5),
-        ("BOTTOMPADDING",(0,0),(-1,-1), 5),
-    ]))
-    elems.append(badge)
-    elems.append(vspace(20))
-    elems.append(Paragraph("Generative Audio", style("T1", fontName="Helvetica-Bold",
-        fontSize=46, textColor=WHITE, leading=52, spaceAfter=0)))
-    elems.append(Paragraph("Composition", style("T2", fontName="Helvetica-Bold",
-        fontSize=46, textColor=ACCENT, leading=52, spaceAfter=12)))
-    elems.append(Paragraph(
-        "Превращаем любительские записи голоса в профессиональные треки<br/>"
+# ════════════════════════════════════════════════════════════════════════════
+# SLIDES
+# ════════════════════════════════════════════════════════════════════════════
+
+def slide_cover():
+    out = []
+    out.append(vs(50))
+    # badge
+    badge = tbl([[cell("MARKET RESEARCH  ·  2025–2026", "Bold", 8, C_ACCENT, TA_CENTER)]],
+                [210], [("BOX",(0,0),(-1,-1),1,C_ACCENT),
+                        ("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#12002A"))])
+    out.append(badge)
+    out.append(vs(18))
+    out.append(p("Generative Audio", S("t1","Bold",44,C_WHITE,TA_LEFT,52)))
+    out.append(p("Composition", S("t2","Bold",44,C_ACCENT,TA_LEFT,52,0,10)))
+    out.append(p(
+        "Превращаем любительские записи голоса в профессиональные треки "
         "с клонированием вашего голоса. Анализ рынка и стратегия выхода.",
-        style("TS", fontName="Helvetica", fontSize=14, textColor=TEXT_MUTED,
-            leading=20, spaceAfter=0)))
-    elems.append(vspace(40))
-    elems.append(hr(ACCENT, 1))
-    # Stats strip
-    strip_data = [[
-        Paragraph("$569M\nРынок 2024", style("sc", fontName="Helvetica-Bold",
-            fontSize=11, textColor=ACCENT2, leading=14, alignment=TA_CENTER)),
-        Paragraph("30.5% CAGR\nРост рынка", style("sc", fontName="Helvetica-Bold",
-            fontSize=11, textColor=ACCENT3, leading=14, alignment=TA_CENTER)),
-        Paragraph("$2.8B\nРынок 2030", style("sc", fontName="Helvetica-Bold",
-            fontSize=11, textColor=ACCENT_WARN, leading=14, alignment=TA_CENTER)),
-        Paragraph("Нет\nВ мире аналогов", style("sc", fontName="Helvetica-Bold",
-            fontSize=11, textColor=ACCENT, leading=14, alignment=TA_CENTER)),
-    ]]
-    strip = Table(strip_data, colWidths=[(W-80)/4]*4)
-    strip.setStyle(TableStyle([
-        ("BACKGROUND",   (0,0),(-1,-1), CARD_BG),
-        ("BOX",          (0,0),(-1,-1), 0.5, CARD_BORDER),
-        ("INNERGRID",    (0,0),(-1,-1), 0.5, CARD_BORDER),
-        ("TOPPADDING",   (0,0),(-1,-1), 12),
-        ("BOTTOMPADDING",(0,0),(-1,-1), 12),
-        ("ALIGN",        (0,0),(-1,-1), "CENTER"),
-        ("VALIGN",       (0,0),(-1,-1), "MIDDLE"),
-    ]))
-    elems.append(strip)
-    elems.append(vspace(40))
-    elems.append(Paragraph("Конфиденциально · Июнь 2025", S_FOOTER))
-    return elems
+        S("ts","Reg",13,C_MUTED,TA_LEFT,19,0,0)))
+    out.append(vs(30))
+    out.append(hr(C_ACCENT, 1))
 
-# ── Page 2: Конкуренты ───────────────────────────────────────────────────────
-def page_competitors():
-    elems = []
-    elems += section_header("01 · Конкурентный ландшафт",
-        "Кто уже на рынке и что им не хватает")
+    strip = tbl([[
+        cell("$569M\nРынок генерат. AI music 2024",  "Bold",11,C_CYAN, TA_CENTER),
+        cell("30.5% CAGR\nРост 2025–2030",            "Bold",11,C_GREEN,TA_CENTER),
+        cell("$2.8B\nПрогноз рынка 2030",             "Bold",11,C_AMBER,TA_CENTER),
+        cell("Нет аналогов\nголосовой клон + трек",   "Bold",11,C_ACCENT,TA_CENTER),
+    ]], [(W-80)/4]*4, [
+        ("INNERGRID",    (0,0),(-1,-1), 0.5, C_BORDER),
+        ("TOPPADDING",   (0,0),(-1,-1), 14),
+        ("BOTTOMPADDING",(0,0),(-1,-1), 14),
+    ])
+    out.append(strip)
+    out.append(vs(40))
+    out.append(p("Конфиденциально · Июнь 2025", s_footer))
+    return out
 
+
+def slide_competitors():
+    out = []
+    out += section_hdr("01 · Конкурентный ландшафт",
+                        "Кто уже на рынке — и что им не хватает")
+
+    widths = [88, 70, 54, 44, 56, 123]
     headers = ["Компания", "Funding", "Цена/мес", "Голос?", "Полный трек?", "Ключевой gap"]
+
+    def row(name, fund, price, voice, track, gap, vc, tc):
+        return [
+            cell(name,  "Bold", 9, C_CYAN,  TA_LEFT),
+            cell(fund,  "Reg",  8, C_MUTED, TA_LEFT),
+            cell(price, "Reg",  9, C_TEXT,  TA_CENTER),
+            cell(voice, "Bold",10, vc,      TA_CENTER),
+            cell(track, "Bold",10, tc,      TA_CENTER),
+            cell(gap,   "Reg",  8, C_RED,   TA_LEFT),
+        ]
+
     rows = [
-        ["Suno AI", "$775M+\n$5.4B val", "$0–$30", "✓ v5.5\n(persona)", "✓", "Не «твой» голос\nНет stem export"],
-        ["Udio AI",  "$70M\n(a16z)",    "$0–$30", "✗",     "✓", "Судебные риски\nНет voice clone"],
-        ["Boomy",   "WMG seed",         "$10–$30","✗",     "✓", "Нет персонализации\nНизкое качество"],
-        ["Soundraw","Undisclosed",       "$11–$32","✗",     "✓", "Нет вокала вообще\nТолько инструментал"],
-        ["AIVA",    "€3M+",             "€0–€49", "✗",     "✓", "Классика/кино\nНет pop/r&b"],
-        ["Mubert",  "Undisclosed",       "$0–$199","✗",     "~",  "Только фон\nНет структуры песни"],
-        ["Beatoven", "$2.4M",           "$0–?",   "✗",     "~",  "Beta стадия\nНет пользоват. голоса"],
+        row("Suno AI",  "$775M+\n$5.4B val", "$0–$30",
+            "✓ v5.5\n(persona)", "✓",
+            "Не «твой» голос\nНет stem export",    C_GREEN, C_GREEN),
+        row("Udio AI",  "$70M (a16z)",        "$0–$30",
+            "✗",                 "✓",
+            "Судебные риски\nНет voice clone",     C_RED,   C_GREEN),
+        row("Boomy",    "WMG seed",            "$10–$30",
+            "✗",                 "✓",
+            "Нет персонализации\nНизкое качество", C_RED,   C_GREEN),
+        row("Soundraw", "Не раскрыто",         "$11–$32",
+            "✗",                 "✓",
+            "Только инструментал\nНет вокала",     C_RED,   C_GREEN),
+        row("AIVA",     "€3M+",                "€0–€49",
+            "✗",                 "✓",
+            "Только классика/кино\nНет pop/r&b",   C_RED,   C_GREEN),
+        row("Mubert",   "Не раскрыто",         "$0–$199",
+            "✗",                 "~",
+            "Только фоновая музыка\nНет структуры",C_RED,   C_AMBER),
+        row("Beatoven", "$2.4M",               "$0–?",
+            "✗",                 "~",
+            "Beta стадия\nНет пользов. голоса",    C_RED,   C_AMBER),
     ]
-    para_rows = []
-    for row in rows:
-        para_rows.append([
-            Paragraph(row[0], style("ct", fontName="Helvetica-Bold", fontSize=9,
-                textColor=ACCENT2, leading=12)),
-            Paragraph(row[1], style("ct2", fontName="Helvetica", fontSize=8,
-                textColor=TEXT_MUTED, leading=11)),
-            Paragraph(row[2], style("ct2", fontName="Helvetica", fontSize=9,
-                textColor=TEXT_MAIN, leading=12)),
-            Paragraph(row[3], style("ct2", fontName="Helvetica-Bold", fontSize=10,
-                textColor=ACCENT3 if "✓" in row[3] else ACCENT_RED, leading=12,
-                alignment=TA_CENTER)),
-            Paragraph(row[4], style("ct2", fontName="Helvetica-Bold", fontSize=10,
-                textColor=ACCENT3 if "✓" in row[4] else ACCENT_WARN, leading=12,
-                alignment=TA_CENTER)),
-            Paragraph(row[5], style("ct3", fontName="Helvetica", fontSize=8,
-                textColor=ACCENT_RED, leading=11)),
-        ])
-    t = colored_table(
-        [Paragraph(h, style("th", fontName="Helvetica-Bold", fontSize=9,
-            textColor=WHITE, leading=12, alignment=TA_CENTER)) for h in headers],
-        para_rows,
-        col_widths=[90, 65, 55, 45, 55, 125],
-        accent=ACCENT
-    )
-    elems.append(t)
-    elems.append(vspace(12))
 
-    elems.append(Paragraph("Наша уникальная позиция", S_SUBSECTION))
-    gap_data = [[
-        Paragraph("🎤  Клонирует<br/>голос пользователя", style("gp",
-            fontName="Helvetica-Bold", fontSize=10, textColor=WHITE, leading=14,
-            alignment=TA_CENTER)),
-        Paragraph("🎵  Полная аранжировка<br/>под стиль фрагментов", style("gp",
-            fontName="Helvetica-Bold", fontSize=10, textColor=WHITE, leading=14,
-            alignment=TA_CENTER)),
-        Paragraph("🎼  Структура песни<br/>из 5-секундного напева", style("gp",
-            fontName="Helvetica-Bold", fontSize=10, textColor=WHITE, leading=14,
-            alignment=TA_CENTER)),
-        Paragraph("🏆  Мастеринг до<br/>−14 LUFS (стриминг)", style("gp",
-            fontName="Helvetica-Bold", fontSize=10, textColor=WHITE, leading=14,
-            alignment=TA_CENTER)),
-    ]]
-    gt = Table(gap_data, colWidths=[(W-80)/4]*4)
-    gt.setStyle(TableStyle([
-        ("BACKGROUND",   (0,0),(-1,-1), colors.HexColor("#1A0040")),
-        ("BOX",          (0,0),(-1,-1), 1, ACCENT),
-        ("INNERGRID",    (0,0),(-1,-1), 0.5, ACCENT),
-        ("TOPPADDING",   (0,0),(-1,-1), 12),
-        ("BOTTOMPADDING",(0,0),(-1,-1), 12),
-        ("VALIGN",       (0,0),(-1,-1), "MIDDLE"),
-    ]))
-    elems.append(gt)
-    return elems
+    out.append(header_tbl(headers, rows, widths))
+    out.append(vs(12))
+    out.append(p("Наша уникальная позиция", s_subsection))
 
-# ── Page 3: Целевая аудитория ────────────────────────────────────────────────
-def page_audience():
-    elems = []
-    elems += section_header("02 · Целевая аудитория",
-        "6 ключевых персон с болями и готовностью платить")
+    usp = tbl([[
+        cell("🎤 Клонирует голос\nпользователя",           "Bold",10,C_WHITE,TA_CENTER),
+        cell("🎵 Полная аранжировка\nиз напетого фрагмента","Bold",10,C_WHITE,TA_CENTER),
+        cell("🎼 Структура песни\nиз 5 секунд записи",     "Bold",10,C_WHITE,TA_CENTER),
+        cell("🏆 Мастеринг\n–14 LUFS (стриминг)",          "Bold",10,C_WHITE,TA_CENTER),
+    ]], [(W-80)/4]*4, [
+        ("BACKGROUND",   (0,0),(-1,-1), colors.HexColor("#12002A")),
+        ("BOX",          (0,0),(-1,-1), 1.5, C_ACCENT),
+        ("INNERGRID",    (0,0),(-1,-1), 0.5, C_ACCENT),
+        ("TOPPADDING",   (0,0),(-1,-1), 13),
+        ("BOTTOMPADDING",(0,0),(-1,-1), 13),
+    ])
+    out.append(usp)
+    return out
+
+
+def slide_audience():
+    out = []
+    out += section_hdr("02 · Целевая аудитория",
+                        "6 ключевых персон — боли и готовность платить")
 
     personas = [
-        {
-            "icon": "🎤",
-            "name": "Алексей, 24",
-            "tag": "AMATEUR SINGER  ·  B2C CORE",
-            "desc": "Поёт в душе и на домашних записях. Хочет звучать как на радио, "
-                    "но не умеет играть и не может позволить студию.",
-            "pain": "Студия — $200/час. Нет инструментов. Голос теряется.",
-            "wtp":  "$12–25/мес",
-            "size": "~180M чел. по миру",
-            "color": ACCENT,
-        },
-        {
-            "icon": "📱",
-            "name": "Диана, 21",
-            "tag": "CONTENT CREATOR  ·  B2C GROWTH",
-            "desc": "TikTok/Reels-блогер, 50k+ подписчиков. Ищет уникальный саундтрек "
-                    "под каждый ролик — не хочет copyright-strike.",
-            "pain": "Стоковая музыка — безликая. AI-трек без голоса — пусто.",
-            "wtp":  "$10–20/мес",
-            "size": "~50M активных\ncontent creators",
-            "color": ACCENT2,
-        },
-        {
-            "icon": "🎮",
-            "name": "Михаил, 31",
-            "tag": "INDIE GAME DEV  ·  B2C/B2B",
-            "desc": "Соло-разработчик инди-игры. Нужен OST на 2 часа — "
-                    "нанять композитора не по бюджету ($5k–$30k).",
-            "pain": "MusicGen — инструментальный. Нет вокала, нет персонажей.",
-            "wtp":  "$30–50/мес или $500 разово",
-            "size": "~2M indie devs\nглобально",
-            "color": ACCENT3,
-        },
-        {
-            "icon": "🎵",
-            "name": "Карина, 28",
-            "tag": "PROSUMER MUSICIAN  ·  B2C UPSELL",
-            "desc": "Умеет петь, пишет тексты, но не умеет аранжировать. "
-                    "Хочет записать демо для лейблов.",
-            "pain": "Аранжировщик — $500+/трек. Demo — 10 треков = $5000.",
-            "wtp":  "$29–49/мес",
-            "size": "~40M any-genre\nsongwriters",
-            "color": ACCENT_WARN,
-        },
-        {
-            "icon": "📺",
-            "name": "Рекламное агентство",
-            "tag": "AD AGENCY  ·  B2B REVENUE",
-            "desc": "Создаёт 20–50 роликов в месяц. Каждому нужна оригинальная музыка "
-                    "— и джингл с нужным брендовым голосом.",
-            "pain": "Лицензия трека — $500–$5000. Джингл от студии — $2000–$15000.",
-            "wtp":  "$500–2000/мес (API)",
-            "size": "~120k агентств\nв US+EU",
-            "color": colors.HexColor("#EC4899"),
-        },
-        {
-            "icon": "🎙",
-            "name": "Подкастер / YouTuber",
-            "tag": "PODCAST / YT  ·  B2C MASS",
-            "desc": "Ведёт еженедельный подкаст. Нужен собственный джингл и фоновая музыка "
-                    "— с его голосом в интро.",
-            "pain": "Нет своего голоса в генераторах. Всё звучит одинаково.",
-            "wtp":  "$8–15/мес",
-            "size": "~5M активных\nподкастеров",
-            "color": ACCENT2,
-        },
+        ("🎤 Алексей, 24",  "AMATEUR SINGER · B2C CORE",
+         "Поёт в душе и на домашних записях. Хочет звучать как на радио, "
+         "но не умеет играть и не может позволить студию.",
+         "Студия — $200/час. Нет инструментов.", "$12–25/мес", "~180M певцов по миру", C_ACCENT),
+        ("📱 Диана, 21",    "CONTENT CREATOR · B2C GROWTH",
+         "TikTok/Reels-блогер, 50k+ подписчиков. Ищет уникальный саундтрек — "
+         "не хочет copyright-strike.",
+         "Стоковая музыка — безликая. AI без голоса — пусто.", "$10–20/мес", "~50M creators", C_CYAN),
+        ("🎮 Михаил, 31",   "INDIE GAME DEV · B2C/B2B",
+         "Соло-разработчик инди-игры. Нужен OST на 2 часа — "
+         "нанять композитора не по бюджету ($5k–$30k).",
+         "MusicGen — только инструментал. Нет вокала персонажей.", "$30–50/мес", "~2M indie devs", C_GREEN),
+        ("🎵 Карина, 28",   "PROSUMER MUSICIAN · B2C UPSELL",
+         "Умеет петь, пишет тексты, но не умеет аранжировать. "
+         "Хочет записать демо для лейблов.",
+         "Аранжировщик — $500+/трек. 10 треков = $5000.", "$29–49/мес", "~40M songwriters", C_AMBER),
+        ("📺 Рекламное агентство", "AD AGENCY · B2B REVENUE",
+         "Создаёт 20–50 роликов в месяц. Каждому нужна оригинальная музыка "
+         "и джингл с нужным брендовым голосом.",
+         "Лицензия трека — $500–$5000. Джингл от студии — $2k–$15k.", "$500–2000/мес (API)", "~120k агентств", C_PINK),
+        ("🎙 Подкастер / YouTuber", "PODCAST / YT · B2C MASS",
+         "Ведёт еженедельный подкаст. Нужен собственный джингл "
+         "и фоновая музыка с его голосом в интро.",
+         "Нет своего голоса в генераторах. Всё звучит одинаково.", "$8–15/мес", "~5M подкастеров", C_CYAN),
     ]
 
     for i in range(0, len(personas), 2):
-        row_elems = []
-        for p in personas[i:i+2]:
-            card_content = [
-                [Paragraph(f"{p['icon']}  {p['name']}", style("pn",
-                    fontName="Helvetica-Bold", fontSize=13, textColor=WHITE,
-                    leading=16))],
-                [Paragraph(p["tag"], style("pt", fontName="Helvetica-Bold",
-                    fontSize=7, textColor=p["color"], leading=9))],
-                [vspace(4)],
-                [Paragraph(p["desc"], style("pd", fontName="Helvetica",
-                    fontSize=9, textColor=TEXT_MAIN, leading=13,
-                    alignment=TA_JUSTIFY))],
-                [vspace(4)],
-                [Paragraph(f'<font color="#EF4444">⚡ Боль: </font>{p["pain"]}',
-                    style("pp", fontName="Helvetica", fontSize=9, textColor=TEXT_MAIN,
-                        leading=13))],
-                [vspace(2)],
-                [Table([[
-                    Paragraph(f"💰 WTP: {p['wtp']}", style("pw",
-                        fontName="Helvetica-Bold", fontSize=8, textColor=ACCENT3,
-                        leading=11, alignment=TA_CENTER)),
-                    Paragraph(f"👥 {p['size']}", style("ps",
-                        fontName="Helvetica", fontSize=8, textColor=TEXT_MUTED,
-                        leading=11, alignment=TA_CENTER)),
-                ]], colWidths=[120, 120], style=TableStyle([
-                    ("TOPPADDING",   (0,0),(-1,-1), 3),
-                    ("BOTTOMPADDING",(0,0),(-1,-1), 3),
-                    ("ALIGN",        (0,0),(-1,-1), "CENTER"),
-                ]))],
+        pair = personas[i:i+2]
+        cards = []
+        for name, tag, desc, pain, wtp, size, color in pair:
+            inner = [
+                [cell(name, "Bold", 12, C_WHITE, TA_LEFT)],
+                [cell(tag,  "Bold",  7, color,   TA_LEFT)],
+                [vs(3)],
+                [p(desc,  S("pd","Reg",9,C_TEXT,TA_JUSTIFY,13))],
+                [vs(3)],
+                [p("⚡ Боль: " + pain, S("pp","Reg",9,C_TEXT,TA_LEFT,13))],
+                [vs(3)],
+                [tbl([[
+                    cell("💰 WTP: " + wtp, "Bold", 8, C_GREEN, TA_CENTER),
+                    cell("👥 " + size,      "Reg",  8, C_MUTED, TA_CENTER),
+                ]], [120, 120])],
             ]
-            card = Table(card_content, colWidths=[(W-100)/2])
+            card = Table([[row_item] for row_item in inner],
+                         colWidths=[(W-100)/2])
             card.setStyle(TableStyle([
-                ("BACKGROUND",    (0,0), (-1,-1), CARD_BG),
-                ("BOX",           (0,0), (-1,-1), 1.2, p["color"]),
-                ("TOPPADDING",    (0,0), (-1,-1), 10),
-                ("BOTTOMPADDING", (0,0), (-1,-1), 10),
-                ("LEFTPADDING",   (0,0), (-1,-1), 12),
-                ("RIGHTPADDING",  (0,0), (-1,-1), 12),
+                ("BACKGROUND",   (0,0),(-1,-1), C_CARD),
+                ("BOX",          (0,0),(-1,-1), 1.2, color),
+                ("TOPPADDING",   (0,0),(-1,-1), 10),
+                ("BOTTOMPADDING",(0,0),(-1,-1), 8),
+                ("LEFTPADDING",  (0,0),(-1,-1), 12),
+                ("RIGHTPADDING", (0,0),(-1,-1), 12),
             ]))
-            row_elems.append(card)
+            cards.append(card)
 
-        if len(row_elems) == 1:
-            row_elems.append(Spacer(1, 1))
+        if len(cards) == 1:
+            cards.append(Spacer(1, 1))
 
-        row_table = Table([row_elems], colWidths=[(W-80)/2]*2)
-        row_table.setStyle(TableStyle([
-            ("VALIGN",         (0,0),(-1,-1), "TOP"),
-            ("LEFTPADDING",    (0,0),(-1,-1), 5),
-            ("RIGHTPADDING",   (0,0),(-1,-1), 5),
-            ("TOPPADDING",     (0,0),(-1,-1), 0),
-            ("BOTTOMPADDING",  (0,0),(-1,-1), 6),
+        row_tbl = Table([cards], colWidths=[(W-80)/2]*2)
+        row_tbl.setStyle(TableStyle([
+            ("VALIGN",        (0,0),(-1,-1), "TOP"),
+            ("LEFTPADDING",   (0,0),(-1,-1), 5),
+            ("RIGHTPADDING",  (0,0),(-1,-1), 5),
+            ("TOPPADDING",    (0,0),(-1,-1), 0),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 5),
         ]))
-        elems.append(row_table)
+        out.append(row_tbl)
+    return out
 
-    return elems
 
-# ── Page 4: Боль ─────────────────────────────────────────────────────────────
-def page_pain():
-    elems = []
-    elems += section_header("03 · Боли, которые мы решаем",
-        "Что не так с текущими решениями — факты от пользователей")
+def slide_pain():
+    out = []
+    out += section_hdr("03 · Боли, которые мы решаем",
+                        "Что не так с текущими решениями — реальные факты")
 
-    pains = [
+    items = [
         ("🔇 Нет клонирования голоса",
-         "Ни один публичный инструмент не позволяет вам загрузить 5 секунд своего голоса "
-         "и получить полноценную песню, спетую именно вашим голосом. "
-         "Suno v5.5 создаёт «вокальную персону» — это не клон, а шаблон. "
-         "Пользователи называют результат «звучит похоже, но не я».",
-         ACCENT_RED),
-        ("🎹 Нет полной аранжировки из фрагмента напева",
-         "Существующие инструменты требуют текстового промпта: «создай рок-трек в ля-миноре». "
-         "Но обычный пользователь не знает тональностей. Он хочет просто напеть — "
-         "и получить готовый трек в своём стиле. Такого нет нигде.",
-         ACCENT_WARN),
-        ("📝 AI не знает ваши слова",
-         "Boomy, Soundraw, Mubert не берут ваши тексты. "
-         "Suno/Udio берут, но только как текстовый ввод — не из записанного голоса. "
-         "Если вы импровизировали мелодию с текстом — система его не слышит.",
-         ACCENT2),
+         "Ни один публичный инструмент не позволяет загрузить 5 секунд своего голоса "
+         "и получить трек, спетый именно вашим голосом. "
+         "Suno v5.5 создаёт «вокальную персону» — шаблон тембра. "
+         "Пользователи: «звучит похоже, но не я». Мы клонируем биометрию через WavLM-ECAPA.", C_RED),
+        ("🎹 Нет полного трека из напетого фрагмента",
+         "Существующие инструменты требуют текстового промпта: «создай рок в ля-миноре». "
+         "Обычный пользователь не знает тональностей. Он хочет просто напеть — "
+         "и получить готовый трек в своём стиле. Такого нет нигде.", C_AMBER),
+        ("📝 AI не слышит ваши слова",
+         "Boomy, Soundraw, Mubert не берут тексты. Suno/Udio берут — "
+         "но только как текстовый ввод, не из записанного голоса. "
+         "Если вы импровизировали мелодию со словами — система их не слышит.", C_CYAN),
         ("⚖️ Юридическая неопределённость",
-         "Suno и Udio обвинили все три мейджора (UMG, Sony, Warner) в нарушении авторских прав. "
-         "Udio урегулировал ($0.002–$0.005 за генерацию). "
-         "Мы используем только лицензированные датасеты (OpenSinger, VocalSet, FMA) — "
-         "это конкурентное преимущество для B2B-клиентов.",
-         ACCENT3),
+         "Suno и Udio обвинили все три мейджора (UMG, Sony, Warner). "
+         "Udio урегулировал: $0.002–$0.005 за генерацию. "
+         "Мы используем только лицензированные датасеты (OpenSinger CC, VocalSet MIT, FMA CC) — "
+         "юридический USP для B2B-клиентов.", C_GREEN),
         ("🎚 Нет профессионального мастеринга",
-         "Треки из Suno/Udio выходят с уровнем −18…−20 LUFS. "
-         "Для Spotify нужно −14 LUFS, для TikTok —14, для YouTube −13.5. "
-         "Пользователи вынуждены отдельно мастерить или платить за Landr ($9–$29/трек). "
-         "Мы включаем мастеринг в пайплайн.",
-         colors.HexColor("#EC4899")),
+         "Треки из Suno/Udio выходят при –18…–20 LUFS. "
+         "Spotify требует –14 LUFS, TikTok –14, YouTube –13.5. "
+         "Пользователи вынуждены платить за Landr ($9–$29/трек). "
+         "Мы включаем мастеринг в пайплайн автоматически.", C_PINK),
     ]
 
-    for icon_title, desc, color in pains:
-        item_data = [[
-            Paragraph(icon_title, style("pt", fontName="Helvetica-Bold", fontSize=11,
-                textColor=color, leading=15)),
-            Paragraph(desc, style("pd", fontName="Helvetica", fontSize=9.5,
-                textColor=TEXT_MAIN, leading=14, alignment=TA_JUSTIFY)),
+    for title, body, color in items:
+        row = [[
+            cell(title, "Bold", 11, color, TA_LEFT),
+            p(body, S("pb","Reg",9.5,C_TEXT,TA_JUSTIFY,14)),
         ]]
-        item = Table(item_data, colWidths=[195, W - 80 - 195 - 10])
-        item.setStyle(TableStyle([
-            ("BACKGROUND",   (0,0),(-1,-1), CARD_BG),
-            ("LEFTBORDER",   (0,0),(0,-1), 3, color),
-            ("TOPPADDING",   (0,0),(-1,-1), 10),
-            ("BOTTOMPADDING",(0,0),(-1,-1), 10),
-            ("LEFTPADDING",  (0,0),(0,-1),  14),
-            ("LEFTPADDING",  (1,0),(1,-1),  12),
-            ("RIGHTPADDING", (0,0),(-1,-1), 12),
-            ("VALIGN",       (0,0),(-1,-1), "TOP"),
-        ]))
-        elems.append(item)
-        elems.append(vspace(5))
+        t = tbl(row, [195, W-80-195-10], [
+            ("LEFTBORDER", (0,0),(0,-1), 3, color),
+        ])
+        out.append(t)
+        out.append(vs(5))
+    return out
 
-    return elems
 
-# ── Page 5: Рынок ────────────────────────────────────────────────────────────
-def page_market():
-    elems = []
-    elems += section_header("04 · Размер рынка",
-        "TAM · SAM · SOM — с источниками и методологией")
+def slide_market():
+    out = []
+    out += section_hdr("04 · Размер рынка",
+                        "TAM · SAM · SOM — с источниками и методологией расчёта")
 
-    elems.append(metrics_row([
-        ("$5.2B",    "TAM · AI in Music\n(Market.us, 2024)", ACCENT),
-        ("$569M",    "Generat. AI Music\n(GVR, 2024)",      ACCENT2),
-        ("$2.7B",    "Voice Cloning Market\n(R&M, 2024)",   ACCENT3),
-        ("30.5%",    "CAGR 2025–2030\n(Grand View Research)",ACCENT_WARN),
+    out.append(metrics_row([
+        ("$5.2B",  "TAM · AI in Music\n(Market.us, 2024)",        C_ACCENT),
+        ("$569M",  "Generat. AI Music\n(Grand View Research, 2024)", C_CYAN),
+        ("$2.7B",  "Voice Cloning Market\n(R&M, 2024)",           C_GREEN),
+        ("30.5%",  "CAGR 2025–2030\n(Grand View Research)",       C_AMBER),
     ]))
-    elems.append(vspace(10))
+    out.append(vs(10))
+    out.append(p("Методология: TAM → SAM → SOM", s_subsection))
 
-    elems.append(Paragraph("Методология: TAM → SAM → SOM", S_SUBSECTION))
+    widths = [55, 215, 95, 130]
+    headers = ["Уровень", "Описание", "Размер (2024)", "Источник"]
+    rows = [
+        [cell("TAM",    "Bold",10,C_CYAN,  TA_CENTER),
+         cell("Весь рынок AI in Music + Voice Cloning\n(генерация, синтез, мастеринг, дистрибуция)",
+              "Reg",9,C_TEXT,TA_LEFT),
+         cell("$7.9B",  "Bold",11,C_CYAN, TA_CENTER),
+         cell("Market.us + R&M 2024","Reg",8,C_MUTED,TA_LEFT)],
 
-    tam_sam_som = [
-        ["Уровень", "Описание", "Размер (2024)", "Источник"],
-        ["TAM", "Весь рынок AI in Music + Voice Cloning\n(генерация, синтез речи, мастеринг, дистрибуция)",
-         "$7.9B", "Market.us + R&M 2024"],
-        ["SAM", "Инструменты генерации треков для\nпросьюмеров, контент-мейкеров, инди-разработчиков\n"
-         "(исключаем enterprise SaaS для мейджоров)",
-         "$920M", "GVR Generat. AI Music\n+ Voice Cloning SAM ~$350M"],
-        ["SOM (Y1)", "Реально достижимая доля в первый год:\nUS + RU рынки, B2C подписки + B2B API.\n"
-         "0.03% от SAM при 10k платящих @ $25 ARPU",
-         "$3M ARR", "Собственная оценка\n(bottom-up)"],
-        ["SOM (Y3)", "При масштабировании до 150k платящих\n"
-         "+ B2B контракты (10 агентств × $1200/мес)",
-         "$54M ARR", "3-year projection"],
+        [cell("SAM",    "Bold",10,C_GREEN, TA_CENTER),
+         cell("Инструменты генерации треков для просьюмеров,\n"
+              "контент-мейкеров, инди-разработчиков\n(исключаем enterprise SaaS для мейджоров)",
+              "Reg",9,C_TEXT,TA_LEFT),
+         cell("$920M",  "Bold",11,C_GREEN,TA_CENTER),
+         cell("GVR Generat. AI Music\n+ Voice Cloning SAM","Reg",8,C_MUTED,TA_LEFT)],
+
+        [cell("SOM Y1", "Bold",10,C_AMBER, TA_CENTER),
+         cell("Реально достижимая доля в первый год:\n"
+              "US + RU рынки, B2C подписки + B2B API.\n"
+              "0.03% от SAM при 10k платящих @ $25 ARPU",
+              "Reg",9,C_TEXT,TA_LEFT),
+         cell("$3M ARR","Bold",11,C_AMBER,TA_CENTER),
+         cell("Bottom-up расчёт\n(см. ниже)","Reg",8,C_MUTED,TA_LEFT)],
+
+        [cell("SOM Y3", "Bold",10,C_PINK,  TA_CENTER),
+         cell("При масштабировании до 150k платящих\n"
+              "+ B2B контракты (10 агентств × $1200/мес)",
+              "Reg",9,C_TEXT,TA_LEFT),
+         cell("$54M ARR","Bold",11,C_PINK, TA_CENTER),
+         cell("3-year projection","Reg",8,C_MUTED,TA_LEFT)],
     ]
-    para_tam = []
-    for i, row in enumerate(tam_sam_som):
-        if i == 0:
-            para_tam.append([Paragraph(c, style("th", fontName="Helvetica-Bold",
-                fontSize=9, textColor=WHITE, leading=12)) for c in row])
-        else:
-            colors_map = {1: ACCENT2, 2: ACCENT3, 3: ACCENT_WARN, 4: colors.HexColor("#EC4899")}
-            c = colors_map.get(i, TEXT_MAIN)
-            para_tam.append([
-                Paragraph(row[0], style("tc", fontName="Helvetica-Bold", fontSize=10,
-                    textColor=c, leading=13, alignment=TA_CENTER)),
-                Paragraph(row[1], style("tc2", fontName="Helvetica", fontSize=9,
-                    textColor=TEXT_MAIN, leading=13)),
-                Paragraph(row[2], style("tc3", fontName="Helvetica-Bold", fontSize=11,
-                    textColor=c, leading=14, alignment=TA_CENTER)),
-                Paragraph(row[3], style("tc4", fontName="Helvetica", fontSize=8,
-                    textColor=TEXT_MUTED, leading=11)),
-            ])
-    t = Table(para_tam, colWidths=[55, 215, 95, 130], repeatRows=1)
-    t.setStyle(TableStyle([
-        ("BACKGROUND",    (0,0), (-1,0),  ACCENT),
-        ("TEXTCOLOR",     (0,0), (-1,0),  WHITE),
-        ("BACKGROUND",    (0,1), (-1,-1), CARD_BG),
-        ("ROWBACKGROUNDS",(0,1), (-1,-1), [CARD_BG, colors.HexColor("#16213E")]),
-        ("GRID",          (0,0), (-1,-1), 0.4, CARD_BORDER),
-        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
-        ("TOPPADDING",    (0,0), (-1,-1), 7),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 7),
-        ("LEFTPADDING",   (0,0), (-1,-1), 7),
-        ("RIGHTPADDING",  (0,0), (-1,-1), 7),
-        ("ALIGN",         (0,0), (0,-1),  "CENTER"),
-        ("ALIGN",         (2,0), (2,-1),  "CENTER"),
-    ]))
-    elems.append(t)
-    elems.append(vspace(8))
-
-    elems.append(Paragraph(
+    out.append(header_tbl(headers, rows, widths))
+    out.append(vs(8))
+    out.append(p(
         "Bottom-up расчёт SOM Y1: контент-мейкеры US+RU (50M потенциальных) → конверсия 0.02% = "
         "10,000 платящих × $25 ARPU × 12 мес = $3M ARR. "
         "Дополнительно: 5 B2B-агентств × $1,200/мес = +$72K ARR в первый год.",
-        style("note", fontName="Helvetica-Oblique", fontSize=8.5, textColor=TEXT_MUTED,
-            leading=13, alignment=TA_JUSTIFY)))
+        s_note))
+    return out
 
-    return elems
 
-# ── Page 6: Риски ────────────────────────────────────────────────────────────
-def page_risks():
-    elems = []
-    elems += section_header("05 · Риски и потенциальная выручка",
-        "Что может пойти не так — и почему это управляемо")
+def slide_risks():
+    out = []
+    out += section_hdr("05 · Риски и прогноз выручки",
+                        "Что может пойти не так — и почему это управляемо")
 
     risks = [
         ("🔴 ВЫСОКИЙ", "Авторские права на обучающие данные",
-         "Иски от мейджоров (как против Suno/Udio). Урегулирование Udio стоило "
-         "~$0.002–$0.005/генерацию роялти.",
-         "Используем только лицензированные датасеты: OpenSinger (CC), VocalSet (MIT), "
-         "FMA (Creative Commons). Юридически чистее конкурентов.",
-         S_RISK_HIGH),
+         "Иски от мейджоров (как против Suno/Udio). Udio урегулировал за ~$0.002–0.005/генерацию.",
+         "Используем только лицензированные данные: OpenSinger (CC), VocalSet (MIT), FMA (CC). "
+         "Юридически чище всех конкурентов.", C_RED),
         ("🟡 СРЕДНИЙ", "Конкуренция с Suno/Udio при добавлении voice clone",
-         "Suno v5.5 уже имеет «vocal persona» — упростит барьер для пользователей.",
-         "Наш голос — настоящий акустический клон из 5 секунд, а не шаблон. "
-         "Плюс: мы поддерживаем загрузку своего голоса без блокировки по платформе.",
-         S_RISK_MED),
+         "Suno v5.5 уже имеет «vocal persona» — упрощает барьер для пользователей.",
+         "Наш голос — настоящий акустический клон из 5 секунд, не шаблон. "
+         "Поддерживаем загрузку без блокировки по платформе.", C_AMBER),
         ("🟡 СРЕДНИЙ", "Задержка обучения моделей",
          "DiffSinger требует 2–3 недели на 8×A100. "
-         "Если A100 дорожают (прецедент 2023–2024) — бюджет обучения растёт.",
-         "LoRA fine-tuning MusicGen снижает GPU-время с 3 недель до 5 дней. "
-         "Используем runpod.io spot instances ($1.49/GPU/h).",
-         S_RISK_MED),
-        ("🟢 НИЗКИЙ", "Качество голоса на малом числе примеров (1–10 фрагментов)",
+         "Если A100 дорожают — бюджет обучения растёт.",
+         "LoRA fine-tuning снижает GPU-время с 3 недель до 5 дней. "
+         "RunPod spot instances: $1.49/GPU/h.", C_AMBER),
+        ("🟢 НИЗКИЙ", "Качество голоса при малом числе примеров (1–10 фрагментов)",
          "WavLM speaker embedding теряет качество при <3 сек аудио.",
          "Минимум 5 секунд хорошего аудио. DeepFilterNet убирает шум. "
-         "Enhancement pipeline компенсирует плохой микрофон.",
-         S_RISK_LOW),
-        ("🟢 НИЗКИЙ", "Проблема «холодного старта» — нет данных о пользователях",
+         "Enhancement pipeline компенсирует плохой микрофон.", C_GREEN),
+        ("🟢 НИЗКИЙ", "Проблема холодного старта — нет данных пользователей",
          "Нет тренировочных данных на пользовательские голоса в продакшене.",
-         "Используем OpenSinger (66 певцов, 50h) + VocalSet (20 певцов). "
-         "Speaker embedding работает zero-shot — специального дообучения не нужно.",
-         S_RISK_LOW),
+         "Speaker encoder работает zero-shot: обучен на VoxCeleb2 (6112 спикеров). "
+         "WavLM-ECAPA обобщается на любой голос без дообучения.", C_GREEN),
     ]
 
-    for badge, title, risk_text, mitigation, badge_style in risks:
+    for badge, title, risk_txt, fix_txt, color in risks:
         row = [[
-            Paragraph(badge, badge_style),
-            Paragraph(f"<b>{title}</b><br/>"
-                      f'<font color="#94A3B8"><i>Риск: </i>{risk_text}</font>',
-                      style("rd", fontName="Helvetica", fontSize=9.5,
-                          textColor=TEXT_MAIN, leading=14)),
-            Paragraph(f'<font color="#10B981">✓ Митигация: </font>{mitigation}',
-                      style("rm", fontName="Helvetica", fontSize=9.5,
-                          textColor=TEXT_MAIN, leading=14)),
+            cell(badge, "Bold", 9, color, TA_CENTER),
+            p(f"{title}\n\nРиск: {risk_txt}",
+              S("rr","Reg",9.5,C_TEXT,TA_LEFT,14)),
+            p(f"✓ Митигация: {fix_txt}",
+              S("rf","Reg",9.5,C_GREEN,TA_LEFT,14)),
         ]]
-        rt = Table(row, colWidths=[72, 210, W-80-72-210-10])
-        rt.setStyle(TableStyle([
-            ("BACKGROUND",   (0,0),(-1,-1), CARD_BG),
-            ("GRID",         (0,0),(-1,-1), 0.3, CARD_BORDER),
-            ("TOPPADDING",   (0,0),(-1,-1), 9),
-            ("BOTTOMPADDING",(0,0),(-1,-1), 9),
-            ("LEFTPADDING",  (0,0),(-1,-1), 10),
-            ("RIGHTPADDING", (0,0),(-1,-1), 10),
-            ("VALIGN",       (0,0),(-1,-1), "TOP"),
-        ]))
-        elems.append(rt)
-        elems.append(vspace(4))
+        t = tbl(row, [70, 215, W-80-70-215-10])
+        out.append(t)
+        out.append(vs(4))
 
-    elems.append(vspace(8))
-    elems.append(Paragraph("Прогноз выручки — Year 1", S_SUBSECTION))
-    rev_data = [
-        ["Сценарий", "Платящих пользователей", "ARPU/мес", "B2B контрактов", "ARR (Year 1)"],
-        ["🐻 Медведь", "3,000", "$15", "0", "$540K"],
-        ["📊 База",    "10,000", "$25", "5 × $1,200", "$3.07M"],
-        ["🚀 Бык",     "30,000", "$28", "15 × $1,500", "$10.35M"],
+    out.append(vs(8))
+    out.append(p("Прогноз выручки — Year 1", s_subsection))
+
+    widths2 = [80, 115, 80, 110, 110]
+    headers2 = ["Сценарий", "Платящих пользов.", "ARPU/мес", "B2B контрактов", "ARR (Year 1)"]
+    rows2 = [
+        [cell("🐻 Медведь","Bold",10,C_RED,  TA_CENTER),
+         cell("3,000",     "Reg", 10,C_TEXT, TA_CENTER),
+         cell("$15",       "Reg", 10,C_TEXT, TA_CENTER),
+         cell("0",         "Reg", 10,C_TEXT, TA_CENTER),
+         cell("$540K",     "Bold",12,C_RED,  TA_CENTER)],
+        [cell("📊 База",   "Bold",10,C_CYAN, TA_CENTER),
+         cell("10,000",    "Reg", 10,C_TEXT, TA_CENTER),
+         cell("$25",       "Reg", 10,C_TEXT, TA_CENTER),
+         cell("5 × $1,200","Reg", 10,C_TEXT, TA_CENTER),
+         cell("$3.07M",    "Bold",12,C_CYAN, TA_CENTER)],
+        [cell("🚀 Бык",    "Bold",10,C_GREEN,TA_CENTER),
+         cell("30,000",    "Reg", 10,C_TEXT, TA_CENTER),
+         cell("$28",       "Reg", 10,C_TEXT, TA_CENTER),
+         cell("15 × $1,500","Reg",10,C_TEXT, TA_CENTER),
+         cell("$10.35M",   "Bold",12,C_GREEN,TA_CENTER)],
     ]
-    colors_row = [ACCENT_RED, ACCENT2, ACCENT3]
-    para_rev = [[Paragraph(c, style("rh", fontName="Helvetica-Bold",
-        fontSize=9, textColor=WHITE, leading=12, alignment=TA_CENTER))
-        for c in rev_data[0]]]
-    for i, row in enumerate(rev_data[1:]):
-        cr = colors_row[i]
-        para_rev.append([
-            Paragraph(row[0], style("rc", fontName="Helvetica-Bold", fontSize=10,
-                textColor=cr, leading=13, alignment=TA_CENTER)),
-            *[Paragraph(c, style("rc2", fontName="Helvetica", fontSize=10,
-                textColor=TEXT_MAIN, leading=13, alignment=TA_CENTER)) for c in row[1:-1]],
-            Paragraph(row[-1], style("rv", fontName="Helvetica-Bold", fontSize=12,
-                textColor=cr, leading=15, alignment=TA_CENTER)),
-        ])
-    rt2 = Table(para_rev, colWidths=[80, 115, 80, 110, 110], repeatRows=1)
-    rt2.setStyle(TableStyle([
-        ("BACKGROUND",    (0,0),(-1,0),  ACCENT),
-        ("BACKGROUND",    (0,1),(-1,-1), CARD_BG),
-        ("ROWBACKGROUNDS",(0,1),(-1,-1), [CARD_BG, colors.HexColor("#16213E")]),
-        ("GRID",          (0,0),(-1,-1), 0.4, CARD_BORDER),
-        ("TOPPADDING",    (0,0),(-1,-1), 7),
-        ("BOTTOMPADDING", (0,0),(-1,-1), 7),
-        ("LEFTPADDING",   (0,0),(-1,-1), 8),
-        ("RIGHTPADDING",  (0,0),(-1,-1), 8),
-        ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
-        ("ALIGN",         (0,0),(-1,-1), "CENTER"),
-    ]))
-    elems.append(rt2)
-    return elems
+    out.append(header_tbl(headers2, rows2, widths2))
+    return out
 
-# ── Page 7: Каналы ───────────────────────────────────────────────────────────
-def page_channels():
-    elems = []
-    elems += section_header("06 · Каналы продвижения",
-        "Как строить воронку от первых пользователей до $3M ARR")
+
+def slide_channels():
+    out = []
+    out += section_hdr("06 · Каналы продвижения",
+                        "Воронка от первых пользователей до $3M ARR")
 
     channels = [
-        {
-            "phase": "0–3 мес",
-            "name":  "Product-Led Growth (PLG)",
-            "icon":  "🔥",
-            "color": ACCENT,
-            "items": [
-                "Freemium: 3 трека/мес бесплатно — без кредитки.",
-                "Вирусный механизм: «Made with GAC» watermark в бесплатной версии → убирается на Pro.",
-                "TikTok/Reels: демо-видео «напел 10 секунд → получил трек». Target CTR >3%.",
-                "ProductHunt запуск — цель: Top-3 of the Day.",
-                "Reddit: r/WeAreTheMusicMakers, r/Songwriting, r/gamedev (органически, no spam).",
-            ]
-        },
-        {
-            "phase": "1–6 мес",
-            "name":  "Creator Partnership",
-            "icon":  "🤝",
-            "color": ACCENT2,
-            "items": [
-                "10–20 микро-инфлюенсеров (50k–500k подп.) по нишам: indie music, content creation, gamedev.",
-                "Deal: Pro-аккаунт + $200–$500 за review-видео. ROI > paid ads на этой стадии.",
-                "YouTube Shorts: 60-сек «before/after» — голос → трек. Алгоритм продвигает.",
-                "Discord серверы (Suno community, Udio community): естественный переход.",
-                "Spotify for Artists: интеграция — загрузка готового трека прямо в дистрибуцию.",
-            ]
-        },
-        {
-            "phase": "3–12 мес",
-            "name":  "SEO + Content Marketing",
-            "icon":  "📈",
-            "color": ACCENT3,
-            "items": [
-                "Ключевые запросы: «AI voice cloning music», «turn humming into song», «сделать трек из голоса».",
-                "Блог: туториалы «Как записать свой первый AI-трек», «Suno vs GAC vs Udio».",
-                "Landing pages под каждый use case: для подкастеров, для геймдевов, для блогеров.",
-                "Programmatic SEO: 1000+ страниц по запросам типа «create [genre] song from voice».",
-            ]
-        },
-        {
-            "phase": "6–12 мес",
-            "name":  "B2B Direct Sales",
-            "icon":  "💼",
-            "color": ACCENT_WARN,
-            "items": [
-                "Outbound: LinkedIn + email к Digital/Ad агентствам (target: Digital Director).",
-                "Pilot-first: 2 недели бесплатного API ($0 за 50 генераций) → конверсия в $1200/мес.",
-                "Partnerства: интеграция с CapCut, Adobe Premiere, DaVinci Resolve (плагин).",
-                "Gamedev: инди-игровые форумы, itch.io, GDC booth (year 2).",
-            ]
-        },
+        ("0–3 мес",  "Product-Led Growth (PLG)", C_ACCENT, [
+            "Freemium: 3 трека/мес бесплатно — без кредитки",
+            'Вирус: «Made with GAC» watermark в бесплатной версии — убирается на Pro',
+            "TikTok/Reels: «напел 10 сек → получил трек». Target CTR >3%",
+            "ProductHunt запуск — цель: Top-3 of the Day",
+            "Reddit: r/WeAreTheMusicMakers, r/Songwriting, r/gamedev — органически",
+        ]),
+        ("1–6 мес",  "Creator Partnership", C_CYAN, [
+            "10–20 микро-инфлюенсеров (50k–500k подп.): indie music, content creation, gamedev",
+            "Deal: Pro-аккаунт + $200–$500 за review-видео. ROI > paid ads",
+            "YouTube Shorts: «before/after» — голос → трек. Алгоритм продвигает",
+            "Discord (Suno/Udio community): естественный переход конкурентной аудитории",
+            "Spotify for Artists: прямая загрузка готового трека в дистрибуцию",
+        ]),
+        ("3–12 мес", "SEO + Content Marketing", C_GREEN, [
+            "Ключевые запросы: «AI voice cloning music», «turn humming into song»",
+            "Блог: туториалы «Как записать AI-трек», «Suno vs GAC vs Udio»",
+            "Landing pages под каждый use case: подкастеры, геймдевы, блогеры",
+            "Programmatic SEO: 1000+ страниц «create [genre] song from voice»",
+        ]),
+        ("6–12 мес", "B2B Direct Sales", C_AMBER, [
+            "Outbound: LinkedIn + email к Digital/Ad агентствам (Digital Director)",
+            "Pilot-first: 2 нед. бесплатного API (50 генераций) → конверсия в $1,200/мес",
+            "Партнёрства: интеграция с CapCut, Adobe Premiere (плагин)",
+            "Gamedev: инди-форумы, itch.io, GDC booth (year 2)",
+        ]),
     ]
 
-    for ch in channels:
-        items_paras = [Paragraph(f"• {it}", style("ci", fontName="Helvetica",
-            fontSize=9.5, textColor=TEXT_MAIN, leading=14)) for it in ch["items"]]
+    for phase, name, color, items in channels:
+        bullet_rows = [[bul(it)] for it in items]
+        inner_content = Table(bullet_rows, colWidths=[(W-80)*0.70])
+        inner_content.setStyle(TableStyle([
+            ("TOPPADDING",   (0,0),(-1,-1), 1),
+            ("BOTTOMPADDING",(0,0),(-1,-1), 1),
+            ("LEFTPADDING",  (0,0),(-1,-1), 0),
+            ("RIGHTPADDING", (0,0),(-1,-1), 0),
+        ]))
+
         card_data = [
-            [Paragraph(f"{ch['icon']}  {ch['name']}", style("cn",
-                fontName="Helvetica-Bold", fontSize=11, textColor=ch["color"], leading=14)),
-             Paragraph(ch["phase"], style("cp", fontName="Helvetica-Bold",
-                fontSize=9, textColor=WHITE, leading=12, alignment=TA_CENTER))],
-            [Table([[p] for p in items_paras], colWidths=[(W-80)*0.72]), Spacer(1,1)],
+            [cell(name,  "Bold",11,color,  TA_LEFT),
+             cell(phase, "Bold", 9,C_WHITE, TA_CENTER)],
+            [inner_content, Spacer(1,1)],
         ]
         card = Table(card_data, colWidths=[(W-80)*0.72, (W-80)*0.28])
         card.setStyle(TableStyle([
-            ("BACKGROUND",   (0,0),(-1,-1), CARD_BG),
-            ("BOX",          (0,0),(-1,-1), 1, ch["color"]),
-            ("BACKGROUND",   (1,0),(1,0),   colors.HexColor("#1A0040")),
-            ("TOPPADDING",   (0,0),(-1,-1), 8),
-            ("BOTTOMPADDING",(0,0),(-1,-1), 8),
+            ("BACKGROUND",   (0,0),(-1,-1), C_CARD),
+            ("BOX",          (0,0),(-1,-1), 1, color),
+            ("BACKGROUND",   (1,0),(1,0),   colors.HexColor("#12002A")),
+            ("TOPPADDING",   (0,0),(-1,-1), 9),
+            ("BOTTOMPADDING",(0,0),(-1,-1), 9),
             ("LEFTPADDING",  (0,0),(-1,-1), 12),
             ("RIGHTPADDING", (0,0),(-1,-1), 12),
             ("VALIGN",       (0,0),(-1,-1), "TOP"),
             ("ALIGN",        (1,0),(1,0),   "CENTER"),
             ("SPAN",         (0,1),(1,1)),
         ]))
-        elems.append(card)
-        elems.append(vspace(6))
+        out.append(card)
+        out.append(vs(6))
+    return out
 
-    return elems
 
-# ── Page 8: B2B / B2C Russia / USA ──────────────────────────────────────────
-def page_sales():
-    elems = []
-    elems += section_header("07 · Стратегия продаж: Russia & USA",
-        "B2C подписки + B2B API — два рынка, одна платформа")
+def slide_sales():
+    out = []
+    out += section_hdr("07 · Стратегия продаж: Russia & USA",
+                        "B2C подписки + B2B API — два рынка, одна платформа")
 
-    # Two column layout
-    ru_content = [
-        Paragraph("🇷🇺  РОССИЯ · B2C", style("rc", fontName="Helvetica-Bold",
-            fontSize=13, textColor=ACCENT2, leading=16)),
-        vspace(4),
-        Paragraph("Рыночный контекст:", style("rl", fontName="Helvetica-Bold",
-            fontSize=9, textColor=TEXT_MUTED, leading=12)),
-        bullet("~180M русскоязычных пользователей, 50M+ в РФ онлайн"),
-        bullet("Suno/Udio недоступны из РФ без VPN — прямое окно"),
-        bullet("ВКонтакте: 73M MAU — нативная интеграция «выложить трек»"),
-        bullet("Яндекс Музыка, СберЗвук: партнёрство для дистрибуции"),
-        vspace(6),
-        Paragraph("Монетизация:", style("rl", fontName="Helvetica-Bold",
-            fontSize=9, textColor=TEXT_MUTED, leading=12)),
-        bullet("Тарифы: 290р/мес (Старт), 790р/мес (Про), 2490р/мес (Студия)"),
-        bullet("Оплата: ЮKassa, СБП, криптовалюта (для обхода санкций)"),
-        bullet("Тестирование на ВКонтакте Mini Apps — встроенная аудитория"),
-        vspace(6),
-        Paragraph("Каналы RU:", style("rl", fontName="Helvetica-Bold",
-            fontSize=9, textColor=TEXT_MUTED, leading=12)),
-        bullet("Telegram: @music_ai_ru канал + бот для демо"),
-        bullet("TikTok RU + VK Клипы — вирусный контент"),
-        bullet("Партнёрство с музыкальными школами (SkillFactory, Яндекс Практикум)"),
-    ]
-
-    us_content = [
-        Paragraph("🇺🇸  США · B2C + B2B", style("uc", fontName="Helvetica-Bold",
-            fontSize=13, textColor=ACCENT3, leading=16)),
-        vspace(4),
-        Paragraph("Рыночный контекст:", style("ul", fontName="Helvetica-Bold",
-            fontSize=9, textColor=TEXT_MUTED, leading=12)),
-        bullet("38.9% мирового рынка AI in Music — самый платёжеспособный"),
-        bullet("$10–$30/мес — стандартная цена (Suno Pro = $10, Premier = $30)"),
-        bullet("B2B: 120K+ рекламных агентств, 2M+ indie game devs"),
-        bullet("App Store / Google Play — основной канал дистрибуции"),
-        vspace(6),
-        Paragraph("B2C воронка:", style("ul", fontName="Helvetica-Bold",
-            fontSize=9, textColor=TEXT_MUTED, leading=12)),
-        bullet("Free tier: 3 трека/мес — без барьеров входа"),
-        bullet("Pro: $12/мес — 50 треков + коммерческие права"),
-        bullet("Studio: $29/мес — unlimited + stem export + API"),
-        vspace(6),
-        Paragraph("B2B стратегия:", style("ul", fontName="Helvetica-Bold",
-            fontSize=9, textColor=TEXT_MUTED, leading=12)),
-        bullet("API: $49/мес (1000 gen) → $499/мес (15K gen) → Enterprise"),
-        bullet("Pilot program: 2 нед. бесплатно для агентств с >10 clients"),
-        bullet("Integration: CapCut Business, Adobe Stock Audio партнёрство"),
-        bullet("Lawyer-verified «clean IP» — ключевой differentiator для B2B"),
-    ]
-
-    def make_col(items, border_color):
-        rows = [[item] for item in items]
-        t = Table(rows, colWidths=[(W-90)/2])
+    def mk_col(items, border):
+        rows = [[it] for it in items]
+        t = Table(rows, colWidths=[(W-100)/2])
         t.setStyle(TableStyle([
-            ("BACKGROUND",   (0,0),(-1,-1), CARD_BG),
-            ("BOX",          (0,0),(-1,-1), 1.5, border_color),
+            ("BACKGROUND",   (0,0),(-1,-1), C_CARD),
+            ("BOX",          (0,0),(-1,-1), 1.5, border),
             ("TOPPADDING",   (0,0),(-1,-1), 8),
             ("BOTTOMPADDING",(0,0),(-1,-1), 4),
             ("LEFTPADDING",  (0,0),(-1,-1), 12),
@@ -846,297 +592,242 @@ def page_sales():
         ]))
         return t
 
-    two_col = Table(
-        [[make_col(ru_content, ACCENT2), make_col(us_content, ACCENT3)]],
-        colWidths=[(W-90)/2, (W-90)/2]
-    )
+    ru = mk_col([
+        cell("🇷🇺  РОССИЯ · B2C", "Bold",13,C_CYAN, TA_LEFT),
+        vs(4),
+        cell("Рыночный контекст:", "Bold",9,C_MUTED,TA_LEFT),
+        bul("~50M онлайн-пользователей в РФ"),
+        bul("Suno/Udio недоступны без VPN — прямое окно"),
+        bul("ВКонтакте: 73M MAU — нативная интеграция"),
+        bul("Яндекс Музыка, СберЗвук: партнёрство для дистрибуции"),
+        vs(4),
+        cell("Тарифы:", "Bold",9,C_MUTED,TA_LEFT),
+        bul("290 ₽/мес — Старт (30 треков)"),
+        bul("790 ₽/мес — Про (150 треков + права)"),
+        bul("2490 ₽/мес — Студия (∞ треков + API)"),
+        vs(4),
+        cell("Каналы:", "Bold",9,C_MUTED,TA_LEFT),
+        bul("Telegram-бот для демо + @music_ai_ru канал"),
+        bul("TikTok RU + VK Клипы — вирусный контент"),
+        bul("Партнёрство с SkillFactory, Яндекс Практикум"),
+    ], C_CYAN)
+
+    us = mk_col([
+        cell("🇺🇸  США · B2C + B2B", "Bold",13,C_GREEN, TA_LEFT),
+        vs(4),
+        cell("Рыночный контекст:", "Bold",9,C_MUTED,TA_LEFT),
+        bul("38.9% мирового рынка AI in Music"),
+        bul("$10–$30/мес — стандартная цена (Suno Pro $10)"),
+        bul("B2B: 120K+ рекламных агентств, 2M+ indie devs"),
+        bul("App Store / Google Play — основной канал"),
+        vs(4),
+        cell("B2C тарифы:", "Bold",9,C_MUTED,TA_LEFT),
+        bul("$0/мес — Free (3 трека без кредитки)"),
+        bul("$12/мес — Pro (50 треков + коммерч. права)"),
+        bul("$29/мес — Studio (∞ + stem export + API)"),
+        vs(4),
+        cell("B2B API:", "Bold",9,C_MUTED,TA_LEFT),
+        bul("$49/мес — 1,000 генераций"),
+        bul("$499/мес — 15,000 генераций"),
+        bul("Enterprise — Custom SLA + «clean IP» гарантия"),
+    ], C_GREEN)
+
+    two_col = Table([[ru, us]], colWidths=[(W-100)/2]*2)
     two_col.setStyle(TableStyle([
-        ("VALIGN",         (0,0),(-1,-1), "TOP"),
-        ("LEFTPADDING",    (0,0),(-1,-1), 5),
-        ("RIGHTPADDING",   (0,0),(-1,-1), 5),
-        ("TOPPADDING",     (0,0),(-1,-1), 0),
-        ("BOTTOMPADDING",  (0,0),(-1,-1), 0),
+        ("VALIGN",        (0,0),(-1,-1), "TOP"),
+        ("LEFTPADDING",   (0,0),(-1,-1), 5),
+        ("RIGHTPADDING",  (0,0),(-1,-1), 5),
+        ("TOPPADDING",    (0,0),(-1,-1), 0),
+        ("BOTTOMPADDING", (0,0),(-1,-1), 0),
     ]))
-    elems.append(two_col)
-    elems.append(vspace(10))
+    out.append(two_col)
+    out.append(vs(10))
+    out.append(p("Сравнительная таблица тарифов", s_subsection))
 
-    # Pricing matrix
-    elems.append(Paragraph("Сравнение тарифов: RU vs US", S_SUBSECTION))
-    price_data = [
-        ["Тариф", "Цена RU", "Цена US", "Треки/мес", "Коммерц. права", "API"],
-        ["Free",   "0 ₽",   "$0",   "3",     "✗", "✗"],
-        ["Старт / Starter", "290 ₽", "$9",  "30",    "✓", "✗"],
-        ["Про / Pro",       "790 ₽", "$19", "150",   "✓", "✗"],
-        ["Студия / Studio", "2490 ₽","$29", "∞",     "✓", "✓ (500 req)"],
-        ["Enterprise API",  "Индив.", "From $499", "∞", "✓", "Custom SLA"],
+    widths = [105, 70, 68, 72, 84, 96]
+    headers = ["Тариф", "Цена RU", "Цена US", "Треков/мес", "Комм. права", "API доступ"]
+    rows = [
+        [cell("Free",                 "Reg", 9,C_MUTED, TA_LEFT),
+         cell("0 ₽",                 "Bold",9,C_MUTED, TA_CENTER),
+         cell("$0",                  "Bold",9,C_MUTED, TA_CENTER),
+         cell("3",                   "Reg", 9,C_TEXT,  TA_CENTER),
+         cell("✗",                   "Bold",10,C_RED,  TA_CENTER),
+         cell("✗",                   "Bold",10,C_RED,  TA_CENTER)],
+        [cell("Старт / Starter",      "Reg", 9,C_TEXT,  TA_LEFT),
+         cell("290 ₽",               "Bold",9,C_CYAN,  TA_CENTER),
+         cell("$9",                  "Bold",9,C_CYAN,  TA_CENTER),
+         cell("30",                  "Reg", 9,C_TEXT,  TA_CENTER),
+         cell("✓",                   "Bold",10,C_GREEN,TA_CENTER),
+         cell("✗",                   "Bold",10,C_RED,  TA_CENTER)],
+        [cell("Про / Pro",            "Reg", 9,C_TEXT,  TA_LEFT),
+         cell("790 ₽",               "Bold",9,C_CYAN,  TA_CENTER),
+         cell("$19",                 "Bold",9,C_CYAN,  TA_CENTER),
+         cell("150",                 "Reg", 9,C_TEXT,  TA_CENTER),
+         cell("✓",                   "Bold",10,C_GREEN,TA_CENTER),
+         cell("✗",                   "Bold",10,C_RED,  TA_CENTER)],
+        [cell("Студия / Studio",      "Reg", 9,C_TEXT,  TA_LEFT),
+         cell("2490 ₽",              "Bold",9,C_AMBER, TA_CENTER),
+         cell("$29",                 "Bold",9,C_AMBER, TA_CENTER),
+         cell("Без лимита",          "Reg", 9,C_TEXT,  TA_CENTER),
+         cell("✓",                   "Bold",10,C_GREEN,TA_CENTER),
+         cell("500 req/мес",         "Bold", 9,C_GREEN,TA_CENTER)],
+        [cell("Enterprise API",       "Bold",9,C_ACCENT,TA_LEFT),
+         cell("Индивид.",            "Reg", 9,C_MUTED, TA_CENTER),
+         cell("от $499",             "Bold",9,C_ACCENT,TA_CENTER),
+         cell("Без лимита",          "Reg", 9,C_TEXT,  TA_CENTER),
+         cell("✓",                   "Bold",10,C_GREEN,TA_CENTER),
+         cell("Custom SLA",          "Bold", 9,C_ACCENT,TA_CENTER)],
     ]
-    col_colors_map = {0: TEXT_MUTED, 1: ACCENT2, 2: ACCENT2, 3: TEXT_MAIN,
-                      4: TEXT_MAIN,  5: TEXT_MAIN}
-    para_price = []
-    for i, row in enumerate(price_data):
-        if i == 0:
-            para_price.append([Paragraph(c, style("ph", fontName="Helvetica-Bold",
-                fontSize=8.5, textColor=WHITE, leading=11, alignment=TA_CENTER))
-                for c in row])
-        else:
-            pr = []
-            for j, cell in enumerate(row):
-                clr = ACCENT if j == 0 else TEXT_MAIN
-                if cell in ("✓", "∞"):
-                    clr = ACCENT3
-                elif cell == "✗":
-                    clr = ACCENT_RED
-                pr.append(Paragraph(cell, style("pc", fontName="Helvetica",
-                    fontSize=9, textColor=clr, leading=12, alignment=TA_CENTER)))
-            para_price.append(pr)
-    pt = Table(para_price, colWidths=[100, 65, 65, 70, 80, 115], repeatRows=1)
-    pt.setStyle(TableStyle([
-        ("BACKGROUND",    (0,0),(-1,0),  ACCENT),
-        ("BACKGROUND",    (0,1),(-1,-1), CARD_BG),
-        ("ROWBACKGROUNDS",(0,1),(-1,-1), [CARD_BG, colors.HexColor("#16213E")]),
-        ("GRID",          (0,0),(-1,-1), 0.4, CARD_BORDER),
-        ("TOPPADDING",    (0,0),(-1,-1), 6),
-        ("BOTTOMPADDING", (0,0),(-1,-1), 6),
-        ("LEFTPADDING",   (0,0),(-1,-1), 6),
-        ("RIGHTPADDING",  (0,0),(-1,-1), 6),
-        ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
-    ]))
-    elems.append(pt)
-    return elems
+    out.append(header_tbl(headers, rows, widths))
+    return out
 
-# ── Page 9: FAQ ──────────────────────────────────────────────────────────────
-def page_faq():
-    elems = []
-    elems += section_header("08 · FAQ: 10 Самых жёстких вопросов",
-        "Вопросы, которые задаст любой инвестор, партнёр или пресса")
+
+def slide_faq():
+    out = []
+    out += section_hdr("08 · FAQ: 10 самых жёстких вопросов",
+                        "Вопросы, которые задаст любой инвестор, партнёр или пресса")
 
     faqs = [
-        (
-            "Q1: Suno v5.5 уже делает voice cloning — чем вы лучше?",
-            "Suno создаёт «vocal persona» — шаблон на основе тембра. Он не воспроизводит точную "
-            "акустику вашего голоса: форманты, дыхание, вибрато. Наш DiffSinger клонирует биометрию "
-            "голоса через WavLM-ECAPA speaker embedding (256-мерный вектор) и синтезирует именно "
-            "<b>ваш</b> голос, а не похожий. Тест: носитель языка слышит разницу в blind test. "
-            "Плюс: мы не привязаны к платформе — голос можно применить к любому треку через API.",
-        ),
-        (
-            "Q2: Вас засудят как Suno и Udio — вы готовы?",
-            "Suno и Udio обучались на стриминге музыки без лицензий. Мы используем исключительно "
-            "лицензированные датасеты: OpenSinger (CC BY-NC-SA), VocalSet (MIT), FMA (Creative Commons). "
-            "MusicGen-large от Meta обучен на licensed-only данных. Это наш юридический USP "
-            "для B2B-сегмента, где агентства не будут рисковать IP-претензиями. Консультация IP-адвоката — "
-            "в roadmap на месяц 2.",
-        ),
-        (
-            "Q3: Почему пользователи переключатся с Suno ($10/мес) на вас?",
-            "Suno не имеет: (1) персонального голосового клона из своих записей, "
-            "(2) полного трека из напетого фрагмента без текстового промпта, "
-            "(3) мастеринга по стандартам стриминга. Наш target — не те, кто уже в Suno. "
-            "Наш target — те 180M человек, которые поют, но ни разу не пробовали AI-музыку, "
-            "потому что «не умеют писать промпты».",
-        ),
-        (
-            "Q4: Вы можете сгенерировать трек за <5 минут на одном A100?",
-            "Да, с оговорками. Enhancement (Demucs + DeepFilterNet): 15 сек. "
-            "ASR (Whisper large-v3): 10 сек. Speaker embedding: 3 сек. "
-            "MusicGen-large (2 мин инструментал): 45–90 сек. "
-            "DiffSinger SVS (DDIM 50 steps, 2 мин вокал): 60–120 сек. "
-            "Mixing + mastering: 5 сек. Итого: 2.5–4 мин на A100 80GB. "
-            "Трек на 4+ мин потребует ~7 мин. В roadmap — ONNX-оптимизация для ускорения ×2.",
-        ),
-        (
-            "Q5: Каково качество — это будет звучать как профессиональный трек?",
-            "DiffSinger + HiFi-GAN достигают MOS (Mean Opinion Score) ~4.1/5 на стандартных тестах "
-            "(OpenSinger eval set). Это уровень «хорошая демо-запись», не «студийный мастер». "
-            "Для контент-мейкеров — достаточно. Для профессионального релиза — нет. "
-            "Честная позиция: мы конкурируем с GarageBand + SoundOn, не с Abbey Road Studios.",
-        ),
-        (
-            "Q6: У вас нет данных пользователей — как обучить модели на хороших голосах?",
-            "Нам не нужны данные пользователей для обучения. Speaker encoder работает zero-shot: "
-            "он обучен на VoxCeleb2 (6112 спикеров) и обобщается на любой новый голос без "
-            "дообучения. WavLM-large + ECAPA-TDNN — state-of-the-art в speaker verification. "
-            "SITW EER = 1.8% на нашей архитектуре. Пользовательский голос обрабатывается "
-            "инференсом, не тренировкой — GDPR-friendly.",
-        ),
-        (
-            "Q7: Каков план выхода для инвесторов?",
-            "Три сценария: (1) M&A — приобретение стриминговой платформой (Spotify, Яндекс Музыка) "
-            "или ad-tech компанией для встроенной персонализации. Прецедент: Spotify купил "
-            "Sonantic (TTS) за ~$100M. (2) Strategic investment — мейджор-лейбл как Warner "
-            "инвестировал в Boomy, UMG — в Udio. (3) IPO при ARR >$50M (горизонт 4–5 лет).",
-        ),
-        (
-            "Q8: Почему не Россия-только? Почему сразу глобально?",
-            "Россия — стартовый рынок с низкой конкуренцией (Suno/Udio заблокированы или недоступны). "
-            "Но TAM в России — $30–50M (оценка). Глобальный TAM — $5.2B. "
-            "Архитектура API-first позволяет обслуживать оба рынка с одним бэкендом. "
-            "Русскоязычный рынок — плацдарм для отработки продукта до US-запуска.",
-        ),
-        (
-            "Q9: Сколько стоит обучение всех моделей и откуда деньги?",
-            "Расчёт: Speaker Encoder (4×A100, 5 дней, $1.49/GPU/h, RunPod): ~$715. "
-            "DiffSinger (8×A100, 14 дней): ~$3,360. MusicGen LoRA (8×A100, 5 дней): ~$1,200. "
-            "Lyrics LLM QLoRA (4×A100, 3 дня): ~$430. Итого: ~$5,700. "
-            "Инфраструктура: $800/мес (inference, 2×A100 on-demand). "
-            "Seed round цель: $500K для найма 2 ML-инженеров + 12 мес runway.",
-        ),
-        (
-            "Q10: Что мешает Google/Meta/Apple сделать то же самое завтра?",
-            "Ничего технически — если они захотят. Но: Google MusicLM ориентирован на B2B и "
-            "не выпускает consumer продукт. Meta AudioCraft — open source, не продукт. "
-            "Apple — не в этом бизнесе. Наше преимущество — не технология (она открытая), "
-            "а: (1) скорость выхода на рынок, (2) фокус на user voice experience, "
-            "(3) юридически чистый IP для B2B. Big Tech боится музыкальных лейблов — "
-            "именно поэтому Suno, Udio и Beatoven существуют.",
-        ),
+        ("Q1: Suno v5.5 уже делает voice cloning — чем вы лучше?",
+         "Suno создаёт «vocal persona» — шаблон на основе тембра. Он не воспроизводит точную "
+         "акустику: форманты, дыхание, вибрато. Наш DiffSinger клонирует биометрию через "
+         "WavLM-ECAPA speaker embedding (256 dim). Тест: носитель языка слышит разницу в blind test. "
+         "Плюс: мы не привязаны к платформе — голос применяется к любому треку через API."),
+        ("Q2: Вас засудят как Suno и Udio — вы готовы?",
+         "Suno и Udio обучались на стриминге без лицензий. Мы используем исключительно "
+         "лицензированные датасеты: OpenSinger (CC BY-NC-SA), VocalSet (MIT), FMA (Creative Commons). "
+         "MusicGen-large обучен на licensed-only данных. Это наш юридический USP для B2B — "
+         "агентства не будут рисковать IP-претензиями. Консультация IP-адвоката в roadmap на месяц 2."),
+        ("Q3: Почему пользователи переключатся с Suno ($10/мес) на вас?",
+         "Наш target — не те, кто уже в Suno. Наш target — 180M человек, которые поют, "
+         "но ни разу не пробовали AI-музыку, потому что «не умеют писать промпты». "
+         "Мы не требуем промптов: просто напой — получи трек."),
+        ("Q4: Вы можете сгенерировать трек за <5 минут на одном A100?",
+         "Да: Enhancement 15 сек + ASR 10 сек + Speaker emb 3 сек + "
+         "MusicGen 45–90 сек + DiffSinger DDIM 50 шагов 60–120 сек + Mix 5 сек = "
+         "2.5–4 мин на A100 80GB. Трек на 4+ мин ~7 мин. ONNX-оптимизация в roadmap — ускорение ×2."),
+        ("Q5: Это будет звучать как профессиональный трек?",
+         "DiffSinger + HiFi-GAN достигают MOS ~4.1/5 (OpenSinger eval). "
+         "Это уровень «хорошая демо-запись», не «студийный мастер». "
+         "Для контент-мейкеров — достаточно. Честная позиция: "
+         "мы конкурируем с GarageBand + SoundOn, не с Abbey Road Studios."),
+        ("Q6: Нет данных пользователей — как работает speaker encoder?",
+         "Нам не нужны данные пользователей для обучения. Speaker encoder работает zero-shot: "
+         "обучен на VoxCeleb2 (6112 спикеров) и обобщается на любой голос без дообучения. "
+         "WavLM-large + ECAPA-TDNN — state-of-the-art. SITW EER = 1.8%. "
+         "Пользовательский голос обрабатывается инференсом, не тренировкой — GDPR-friendly."),
+        ("Q7: Каков план выхода для инвесторов?",
+         "Три сценария: (1) M&A — приобретение Spotify/Яндекс Музыкой для встроенной "
+         "персонализации. Прецедент: Spotify купил Sonantic (TTS) за ~$100M. "
+         "(2) Strategic investment — мейджор-лейбл как Warner инвестировал в Boomy. "
+         "(3) IPO при ARR >$50M (горизонт 4–5 лет)."),
+        ("Q8: Почему не Россия-только? Почему глобально?",
+         "Россия — стартовый рынок: Suno/Udio заблокированы, конкуренция низкая, TAM $30–50M. "
+         "Глобальный TAM — $5.2B. API-first архитектура позволяет обслуживать оба рынка "
+         "с одним бэкендом. Русскоязычный рынок — плацдарм для отработки продукта до US-запуска."),
+        ("Q9: Сколько стоит обучение моделей и откуда деньги?",
+         "Speaker Encoder (4×A100, 5 дн., RunPod $1.49/h): ~$715. "
+         "DiffSinger (8×A100, 14 дн.): ~$3,360. "
+         "MusicGen LoRA (8×A100, 5 дн.): ~$1,200. "
+         "Lyrics LLM QLoRA (4×A100, 3 дн.): ~$430. Итого: ~$5,700. "
+         "Inference: $800/мес (2×A100 on-demand). Seed round цель: $500K на 12 мес runway."),
+        ("Q10: Что мешает Google/Meta/Apple сделать то же самое завтра?",
+         "Ничего технически — если захотят. Но: Google MusicLM ориентирован на B2B, "
+         "не выпускает consumer продукт. Meta AudioCraft — open source, не продукт. "
+         "Apple — не в этом бизнесе. Big Tech боится музыкальных лейблов — "
+         "именно поэтому Suno, Udio и Beatoven существуют. Наше преимущество — "
+         "скорость выхода + user voice experience + юридически чистый IP для B2B."),
     ]
 
     for q, a in faqs:
-        elems.append(Paragraph(q, S_FAQ_Q))
-        elems.append(Paragraph(a, S_FAQ_A))
-        elems.append(hr(CARD_BORDER, 0.5))
+        out.append(p(q, s_faq_q))
+        out.append(p(a, s_faq_a))
+        out.append(hr(C_BORDER, 0.5))
 
-    return elems
+    return out
 
-# ── Final slide ──────────────────────────────────────────────────────────────
-def page_closing():
-    elems = []
-    elems.append(vspace(60))
-    elems.append(Paragraph("Что дальше?", style("ct", fontName="Helvetica-Bold",
-        fontSize=32, textColor=WHITE, leading=38, spaceAfter=6)))
-    elems.append(Paragraph(
-        "Дорожная карта от идеи до $3M ARR",
-        style("cs", fontName="Helvetica", fontSize=14, textColor=ACCENT2,
-            leading=18, spaceAfter=20)))
-    elems.append(hr())
 
-    roadmap = [
-        ["Месяц", "Milestone", "Бюджет"],
-        ["1–2",  "Обучение моделей (DiffSinger, Speaker, MusicGen LoRA)", "$6–8K GPU"],
-        ["2–3",  "MVP API + Telegram-бот для демо", "$0 (команда)"],
-        ["3",    "ProductHunt запуск + 1,000 первых пользователей", "$2K маркетинг"],
-        ["3–6",  "VK Mini App + 5,000 платящих RU-пользователей", "$5K retention"],
-        ["6",    "US beta launch — Web app + ProductHunt EN", "$10K PR"],
-        ["9",    "10,000 платящих глобально + 5 B2B-клиентов", "—"],
-        ["12",   "Seed round close · ARR $3M · Series A prep", "$500K raise"],
+def slide_closing():
+    out = []
+    out.append(vs(50))
+    out.append(p("Что дальше?", S("ct","Bold",32,C_WHITE,TA_LEFT,38,0,6)))
+    out.append(p("Дорожная карта от MVP до $3M ARR",
+                 S("cs","Reg",14,C_CYAN,TA_LEFT,18,0,18)))
+    out.append(hr())
+
+    widths = [50, 340, 105]
+    headers = ["Месяц", "Milestone", "Бюджет"]
+    rows = [
+        [cell("1–2",  "Bold",10,C_CYAN,  TA_CENTER),
+         cell("Обучение моделей (DiffSinger, Speaker Encoder, MusicGen LoRA)","Reg",10,C_TEXT,TA_LEFT),
+         cell("$6–8K GPU","Bold",9,C_GREEN,TA_CENTER)],
+        [cell("2–3",  "Bold",10,C_CYAN,  TA_CENTER),
+         cell("MVP API + Telegram-бот для демо","Reg",10,C_TEXT,TA_LEFT),
+         cell("$0 (команда)","Bold",9,C_MUTED,TA_CENTER)],
+        [cell("3",    "Bold",10,C_CYAN,  TA_CENTER),
+         cell("ProductHunt запуск + 1,000 первых пользователей","Reg",10,C_TEXT,TA_LEFT),
+         cell("$2K маркетинг","Bold",9,C_GREEN,TA_CENTER)],
+        [cell("3–6",  "Bold",10,C_CYAN,  TA_CENTER),
+         cell("VK Mini App + 5,000 платящих RU-пользователей","Reg",10,C_TEXT,TA_LEFT),
+         cell("$5K retention","Bold",9,C_GREEN,TA_CENTER)],
+        [cell("6",    "Bold",10,C_CYAN,  TA_CENTER),
+         cell("US beta launch — Web app + ProductHunt EN","Reg",10,C_TEXT,TA_LEFT),
+         cell("$10K PR","Bold",9,C_GREEN,TA_CENTER)],
+        [cell("9",    "Bold",10,C_AMBER, TA_CENTER),
+         cell("10,000 платящих глобально + 5 B2B-клиентов","Reg",10,C_TEXT,TA_LEFT),
+         cell("—","Reg",9,C_MUTED,TA_CENTER)],
+        [cell("12",   "Bold",10,C_GREEN, TA_CENTER),
+         cell("Seed round close · ARR $3M · Series A prep","Bold",10,C_GREEN,TA_LEFT),
+         cell("$500K raise","Bold",9,C_GREEN,TA_CENTER)],
     ]
-    para_road = []
-    for i, row in enumerate(roadmap):
-        if i == 0:
-            para_road.append([Paragraph(c, style("rh", fontName="Helvetica-Bold",
-                fontSize=9, textColor=WHITE, leading=12, alignment=TA_CENTER))
-                for c in row])
-        else:
-            para_road.append([
-                Paragraph(row[0], style("rm", fontName="Helvetica-Bold", fontSize=10,
-                    textColor=ACCENT2, leading=13, alignment=TA_CENTER)),
-                Paragraph(row[1], style("rm2", fontName="Helvetica", fontSize=10,
-                    textColor=TEXT_MAIN, leading=13)),
-                Paragraph(row[2], style("rm3", fontName="Helvetica-Bold", fontSize=9,
-                    textColor=ACCENT3, leading=13, alignment=TA_CENTER)),
-            ])
-    rt = Table(para_road, colWidths=[50, 340, 105], repeatRows=1)
-    rt.setStyle(TableStyle([
-        ("BACKGROUND",    (0,0),(-1,0),  ACCENT),
-        ("BACKGROUND",    (0,1),(-1,-1), CARD_BG),
-        ("ROWBACKGROUNDS",(0,1),(-1,-1), [CARD_BG, colors.HexColor("#16213E")]),
-        ("GRID",          (0,0),(-1,-1), 0.4, CARD_BORDER),
-        ("TOPPADDING",    (0,0),(-1,-1), 8),
-        ("BOTTOMPADDING", (0,0),(-1,-1), 8),
-        ("LEFTPADDING",   (0,0),(-1,-1), 10),
-        ("RIGHTPADDING",  (0,0),(-1,-1), 10),
-        ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
-    ]))
-    elems.append(rt)
-    elems.append(vspace(24))
+    out.append(header_tbl(headers, rows, widths))
+    out.append(vs(20))
 
-    cta_data = [[
-        Paragraph("💌  Контакт", style("cta1", fontName="Helvetica-Bold",
-            fontSize=11, textColor=ACCENT2, leading=14, alignment=TA_CENTER)),
-        Paragraph("📊  Данные", style("cta2", fontName="Helvetica-Bold",
-            fontSize=11, textColor=ACCENT3, leading=14, alignment=TA_CENTER)),
-        Paragraph("🚀  Статус", style("cta3", fontName="Helvetica-Bold",
-            fontSize=11, textColor=ACCENT, leading=14, alignment=TA_CENTER)),
-    ],[
-        Paragraph("nadlervalentin2000\n@gmail.com", style("ctav", fontName="Helvetica",
-            fontSize=9, textColor=TEXT_MUTED, leading=13, alignment=TA_CENTER)),
-        Paragraph("github.com/Firephase/Start\nbranch: claude/generative-audio-*",
-            style("ctav", fontName="Helvetica", fontSize=9, textColor=TEXT_MUTED,
-                leading=13, alignment=TA_CENTER)),
-        Paragraph("MVP ready · Models training\nSeed seeking",
-            style("ctav", fontName="Helvetica-Bold", fontSize=9, textColor=ACCENT,
-                leading=13, alignment=TA_CENTER)),
-    ]]
-    cta = Table(cta_data, colWidths=[(W-80)/3]*3)
-    cta.setStyle(TableStyle([
-        ("BACKGROUND",   (0,0),(-1,-1), CARD_BG),
-        ("BOX",          (0,0),(-1,-1), 1, ACCENT),
-        ("INNERGRID",    (0,0),(-1,-1), 0.5, CARD_BORDER),
-        ("TOPPADDING",   (0,0),(-1,-1), 12),
-        ("BOTTOMPADDING",(0,0),(-1,-1), 12),
-        ("VALIGN",       (0,0),(-1,-1), "MIDDLE"),
-    ]))
-    elems.append(cta)
-    elems.append(vspace(30))
-    elems.append(Paragraph(
-        "Sources: Grand View Research · Market.us · MarketsandMarkets · Spherical Insights · "
+    cta = tbl([[
+        cell("💌 Контакт\nnadlervalentin2000@gmail.com",   "Bold",10,C_CYAN, TA_CENTER),
+        cell("📊 Код проекта\ngithub.com/Firephase/Start", "Bold",10,C_GREEN,TA_CENTER),
+        cell("🚀 Статус\nMVP ready · Models training\nSeed seeking","Bold",10,C_ACCENT,TA_CENTER),
+    ]], [(W-80)/3]*3, [
+        ("INNERGRID",    (0,0),(-1,-1), 0.5, C_BORDER),
+        ("BOX",          (0,0),(-1,-1), 1.5, C_ACCENT),
+        ("TOPPADDING",   (0,0),(-1,-1), 14),
+        ("BOTTOMPADDING",(0,0),(-1,-1), 14),
+    ])
+    out.append(cta)
+    out.append(vs(24))
+    out.append(p(
+        "Источники: Grand View Research · Market.us · MarketsandMarkets · Spherical Insights · "
         "TechCrunch · Billboard · Music Business Worldwide · Variety · Sacra · Crunchbase",
-        S_FOOTER))
-    return elems
+        s_footer))
+    return out
 
-# ── Background on each page ──────────────────────────────────────────────────
-def on_page(canvas, doc):
-    canvas.saveState()
-    canvas.setFillColor(PAGE_BG)
-    canvas.rect(0, 0, W, H, fill=1, stroke=0)
-    # Accent line top
-    canvas.setFillColor(ACCENT)
-    canvas.rect(0, H - 4, W, 4, fill=1, stroke=0)
-    # Page number (skip cover page 1)
-    if doc.page > 1:
-        canvas.setFillColor(TEXT_MUTED)
-        canvas.setFont("Helvetica", 7)
-        canvas.drawRightString(W - 28, 16, f"Generative Audio Composition  ·  Market Research 2025")
-        canvas.setFillColor(ACCENT)
-        canvas.setFont("Helvetica-Bold", 9)
-        canvas.drawRightString(W - 28, 26, f"{doc.page - 1} / 9")
-    canvas.restoreState()
 
-# ── Build PDF ────────────────────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════════════
 def build():
     doc = SimpleDocTemplate(
-        OUTPUT_PATH,
+        OUTPUT,
         pagesize=A4,
-        leftMargin=30*mm,
+        leftMargin=28*mm,
         rightMargin=20*mm,
-        topMargin=20*mm,
-        bottomMargin=18*mm,
+        topMargin=18*mm,
+        bottomMargin=16*mm,
     )
 
     story = []
-    story += title_slide()
-    story.append(PageBreak())
-    story += page_competitors()
-    story.append(PageBreak())
-    story += page_audience()
-    story.append(PageBreak())
-    story += page_pain()
-    story.append(PageBreak())
-    story += page_market()
-    story.append(PageBreak())
-    story += page_risks()
-    story.append(PageBreak())
-    story += page_channels()
-    story.append(PageBreak())
-    story += page_sales()
-    story.append(PageBreak())
-    story += page_faq()
-    story.append(PageBreak())
-    story += page_closing()
+    story += slide_cover();       story.append(PageBreak())
+    story += slide_competitors(); story.append(PageBreak())
+    story += slide_audience();    story.append(PageBreak())
+    story += slide_pain();        story.append(PageBreak())
+    story += slide_market();      story.append(PageBreak())
+    story += slide_risks();       story.append(PageBreak())
+    story += slide_channels();    story.append(PageBreak())
+    story += slide_sales();       story.append(PageBreak())
+    story += slide_faq();         story.append(PageBreak())
+    story += slide_closing()
 
     doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
-    print(f"PDF saved: {OUTPUT_PATH}")
+    print(f"PDF saved: {OUTPUT}")
+
 
 if __name__ == "__main__":
     build()
