@@ -1,0 +1,26 @@
+services:
+  - type: worker
+    name: reddit-analytics-bot
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.main
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: REDDIT_CLIENT_ID
+        sync: false
+      - key: REDDIT_CLIENT_SECRET
+        sync: false
+      - key: REDDIT_USER_AGENT
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///./data/bot.db
+    disk:
+      name: bot-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
