@@ -3,10 +3,10 @@ from html import escape
 
 def format_telegram_summary(analytics: dict) -> str:
     lines = [
-        f"📊 Отчёт по запросу: <b>{escape(analytics['query'])}</b>",
-        f"Найдено материалов: {analytics['total_items']}",
+        f"📊 Report for query: <b>{escape(analytics['query'])}</b>",
+        f"Items found: {analytics['total_items']}",
         "",
-        "<b>Топ постов:</b>",
+        "<b>Top posts:</b>",
     ]
     for post in analytics["top_posts"][:5]:
         lines.append(
@@ -15,7 +15,7 @@ def format_telegram_summary(analytics: dict) -> str:
         )
 
     lines.append("")
-    lines.append("<b>Топ комментариев:</b>")
+    lines.append("<b>Top comments:</b>")
     for comment in analytics["top_comments"][:5]:
         lines.append(
             f"• [{comment['score']}▲] r/{escape(comment['subreddit'])}: "
@@ -25,19 +25,19 @@ def format_telegram_summary(analytics: dict) -> str:
     lines.append("")
     sentiment = analytics["sentiment"]
     lines.append(
-        "<b>Тональность:</b> "
+        "<b>Sentiment:</b> "
         f"👍 {sentiment['positive_pct']}% / "
         f"😐 {sentiment['neutral_pct']}% / "
         f"👎 {sentiment['negative_pct']}%"
     )
 
     lines.append("")
-    lines.append("<b>Частые темы:</b> " + ", ".join(
+    lines.append("<b>Common topics:</b> " + ", ".join(
         word for word, _ in analytics["keyword_frequency"][:10]
     ))
 
     lines.append("")
-    lines.append("Полный отчёт отправлен /email. Команды: /filter, /run, /report")
+    lines.append("Full report is sent via /email. Commands: /filter, /run, /report")
 
     return "\n".join(lines)
 
@@ -71,26 +71,26 @@ def format_email_html(analytics: dict) -> str:
     return f"""
     <html>
     <body style="font-family: sans-serif; max-width: 700px; margin: 0 auto;">
-      <h2>Аналитика Reddit по запросу: {escape(analytics['query'])}</h2>
-      <p>Всего проанализировано материалов: {analytics['total_items']}</p>
+      <h2>Reddit analytics for query: {escape(analytics['query'])}</h2>
+      <p>Total items analyzed: {analytics['total_items']}</p>
 
-      <h3>Тональность</h3>
-      <p>👍 Позитив: {sentiment['positive_pct']}% &nbsp;
-         😐 Нейтрально: {sentiment['neutral_pct']}% &nbsp;
-         👎 Негатив: {sentiment['negative_pct']}%</p>
+      <h3>Sentiment</h3>
+      <p>👍 Positive: {sentiment['positive_pct']}% &nbsp;
+         😐 Neutral: {sentiment['neutral_pct']}% &nbsp;
+         👎 Negative: {sentiment['negative_pct']}%</p>
 
-      <h3>Топ постов по рейтингу</h3>
+      <h3>Top posts by score</h3>
       <ul>{top_posts_html}</ul>
 
-      <h3>Топ комментариев по рейтингу</h3>
+      <h3>Top comments by score</h3>
       <ul>{top_comments_html}</ul>
 
-      <h3>Частотность ключевых слов</h3>
+      <h3>Keyword frequency</h3>
       <p>{keyword_row}</p>
 
-      <h3>Сабреддиты-источники</h3>
+      <h3>Source subreddits</h3>
       <table border="1" cellpadding="6" cellspacing="0">
-        <tr><th>Сабреддит</th><th>Материалов</th><th>Средний рейтинг</th></tr>
+        <tr><th>Subreddit</th><th>Items</th><th>Avg score</th></tr>
         {subreddit_rows}
       </table>
     </body>

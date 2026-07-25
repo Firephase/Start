@@ -66,7 +66,7 @@ async def _get_json(reddit: httpx.AsyncClient, path: str, params: dict) -> dict:
             last_error = exc
 
     raise RedditUnavailableError(
-        "Reddit сейчас блокирует запросы (403/429). Попробуй ещё раз через пару минут."
+        "Reddit is blocking requests right now (403/429). Try again in a couple of minutes."
     ) from last_error
 
 

@@ -34,15 +34,15 @@ async def _get_chat_and_search(
 
 
 HELP_TEXT = (
-    "Привет! Я ищу материалы на Reddit по твоему запросу и присылаю аналитику "
-    "с ссылками на источники.\n\n"
-    "1. /setemail you@example.com — куда слать отчёты\n"
-    "2. /search <запрос> — начать поиск\n"
-    "3. /filter subreddit:python days:30 limit:100 — уточнить фильтры\n"
-    "4. /run — (пере)запустить поиск с текущими фильтрами\n"
-    "5. /report — показать последний отчёт в чате\n"
-    "6. /email — отправить последний отчёт на почту\n"
-    "/help — эта справка"
+    "Hi! I search Reddit for your query and send you analytics with links "
+    "to the sources.\n\n"
+    "1. /setemail you@example.com — where to send reports\n"
+    "2. /search <query> — start a search\n"
+    "3. /filter subreddit:python days:30 limit:100 — refine filters\n"
+    "4. /run — (re)run the search with the current filters\n"
+    "5. /report — show the latest report in this chat\n"
+    "6. /email — send the latest report by email\n"
+    "/help — this help message"
 )
 
 
@@ -67,7 +67,7 @@ async def cmd_setemail(
 ) -> None:
     email = (command.args or "").strip()
     if not EMAIL_RE.match(email):
-        await message.answer("Использование: /setemail you@example.com")
+        await message.answer("Usage: /setemail you@example.com")
         return
 
     async with session_factory() as session:
@@ -75,7 +75,7 @@ async def cmd_setemail(
         user.email = email
         await session.commit()
 
-    await message.answer(f"Почта сохранена: {email}")
+    await message.answer(f"Email saved: {email}")
 
 
 @router.message(Command("search"))
@@ -84,7 +84,7 @@ async def cmd_search(
 ) -> None:
     query = (command.args or "").strip()
     if not query:
-        await message.answer("Использование: /search <запрос>")
+        await message.answer("Usage: /search <query>")
         return
 
     async with session_factory() as session:
@@ -98,8 +98,8 @@ async def cmd_search(
         await session.commit()
 
     await message.answer(
-        f"Создан новый поиск: «{query}». Уточни фильтры через /filter или сразу "
-        "запусти /run."
+        f"New search created: «{query}». Refine filters via /filter or just "
+        "run /run."
     )
 
 
@@ -110,15 +110,15 @@ async def cmd_filter(
     args = (command.args or "").strip()
     if not args:
         await message.answer(
-            "Использование: /filter subreddit:python,news days:30 limit:100\n"
-            "Поддерживаемые ключи: subreddit, days (или time_filter), limit"
+            "Usage: /filter subreddit:python,news days:30 limit:100\n"
+            "Supported keys: subreddit, days (or time_filter), limit"
         )
         return
 
     async with session_factory() as session:
         chat, search = await _get_chat_and_search(session, message)
         if search is None:
-            await message.answer("Сначала создай поиск через /search <запрос>")
+            await message.answer("Start a search first with /search <query>")
             return
 
         for token in args.split():
@@ -143,8 +143,8 @@ async def cmd_filter(
         await session.commit()
 
     await message.answer(
-        f"Фильтры обновлены: subreddits={search.get_subreddits() or 'all'}, "
-        f"time_filter={search.time_filter}, limit={search.limit}. Запусти /run."
+        f"Filters updated: subreddits={search.get_subreddits() or 'all'}, "
+        f"time_filter={search.time_filter}, limit={search.limit}. Run /run."
     )
 
 
@@ -157,10 +157,10 @@ async def cmd_run(
     async with session_factory() as session:
         chat, search = await _get_chat_and_search(session, message)
         if search is None:
-            await message.answer("Сначала создай поиск через /search <запрос>")
+            await message.answer("Start a search first with /search <query>")
             return
 
-        await message.answer(f"Ищу на Reddit по запросу «{search.query}»…")
+        await message.answer(f"Searching Reddit for «{search.query}»…")
 
         params = SearchParams(
             query=search.query,
@@ -187,7 +187,7 @@ async def cmd_report(message: Message, session_factory: async_sessionmaker) -> N
     async with session_factory() as session:
         chat, search = await _get_chat_and_search(session, message)
         if search is None:
-            await message.answer("Ещё нет ни одного поиска. Начни с /search <запрос>")
+            await message.answer("No searches yet. Start with /search <query>")
             return
 
         result = await session.execute(
@@ -199,7 +199,7 @@ async def cmd_report(message: Message, session_factory: async_sessionmaker) -> N
         report = result.scalar_one_or_none()
 
     if report is None:
-        await message.answer("Отчётов пока нет. Запусти /run.")
+        await message.answer("No reports yet. Run /run.")
         return
 
     analytics = json.loads(report.analytics_json)
@@ -215,10 +215,10 @@ async def cmd_email(
         chat, search = await _get_chat_and_search(session, message)
 
         if not user.email:
-            await message.answer("Сначала укажи почту: /setemail you@example.com")
+            await message.answer("Set your email first: /setemail you@example.com")
             return
         if search is None:
-            await message.answer("Ещё нет ни одного поиска. Начни с /search <запрос>")
+            await message.answer("No searches yet. Start with /search <query>")
             return
 
         result = await session.execute(
@@ -229,7 +229,7 @@ async def cmd_email(
         )
         report = result.scalar_one_or_none()
         if report is None:
-            await message.answer("Отчётов пока нет. Запусти /run.")
+            await message.answer("No reports yet. Run /run.")
             return
 
         analytics = json.loads(report.analytics_json)
@@ -239,11 +239,11 @@ async def cmd_email(
             api_key=config.resend_api_key,
             from_email=config.resend_from_email,
             to_email=user.email,
-            subject=f"Reddit-аналитика: {analytics['query']}",
+            subject=f"Reddit analytics: {analytics['query']}",
             html=html,
         )
 
         report.emailed_at = datetime.datetime.utcnow()
         await session.commit()
 
-    await message.answer(f"Отчёт отправлен на {user.email}")
+    await message.answer(f"Report sent to {user.email}")
