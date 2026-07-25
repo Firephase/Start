@@ -3,12 +3,25 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from app.config import Config
-
 COMMENTS_PER_POST = 5
 BASE_URL = "https://old.reddit.com"
 RETRY_STATUS_CODES = {403, 429}
 RETRY_DELAYS = (1.0, 3.0)
+
+# Mimic a real desktop Chrome browser. A distinctive "bot" User-Agent is
+# what tends to trip Reddit's anti-bot WAF on the public .json endpoints,
+# especially from datacenter/VPS IPs.
+BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://old.reddit.com/",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
+}
 
 
 class RedditUnavailableError(Exception):
@@ -35,14 +48,12 @@ class SearchParams:
     limit: int = 50
 
 
-def make_reddit_client(config: Config) -> httpx.AsyncClient:
+def make_reddit_client() -> httpx.AsyncClient:
     return httpx.AsyncClient(
         base_url=BASE_URL,
-        headers={
-            "User-Agent": config.reddit_user_agent,
-            "Accept": "application/json",
-        },
+        headers=BROWSER_HEADERS,
         timeout=15.0,
+        follow_redirects=True,
     )
 
 

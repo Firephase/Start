@@ -17,7 +17,6 @@ def _require(name: str) -> str:
 class Config:
     telegram_bot_token: str
     bot_owner_id: int
-    reddit_user_agent: str
     resend_api_key: str
     resend_from_email: str
     database_url: str
@@ -33,9 +32,6 @@ class Config:
         return cls(
             telegram_bot_token=_require("TELEGRAM_BOT_TOKEN"),
             bot_owner_id=bot_owner_id,
-            reddit_user_agent=os.getenv(
-                "REDDIT_USER_AGENT", "reddit-analytics-bot/0.1"
-            ),
             resend_api_key=_require("RESEND_API_KEY"),
             resend_from_email=_require("RESEND_FROM_EMAIL"),
             database_url=os.getenv(
