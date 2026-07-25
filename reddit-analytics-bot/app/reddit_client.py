@@ -1,10 +1,11 @@
 from dataclasses import dataclass, field
 
-import asyncpraw
+import httpx
 
 from app.config import Config
 
 COMMENTS_PER_POST = 5
+BASE_URL = "https://www.reddit.com"
 
 
 @dataclass
@@ -27,60 +28,89 @@ class SearchParams:
     limit: int = 50
 
 
-def make_reddit_client(config: Config) -> asyncpraw.Reddit:
-    return asyncpraw.Reddit(
-        client_id=config.reddit_client_id,
-        client_secret=config.reddit_client_secret,
-        user_agent=config.reddit_user_agent,
+def make_reddit_client(config: Config) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        base_url=BASE_URL,
+        headers={"User-Agent": config.reddit_user_agent},
+        timeout=15.0,
     )
 
 
+async def _top_comments(
+    reddit: httpx.AsyncClient, permalink: str
+) -> list[dict]:
+    try:
+        response = await reddit.get(
+            f"{permalink}.json",
+            params={"sort": "top", "limit": COMMENTS_PER_POST},
+        )
+        response.raise_for_status()
+        _, comments_listing = response.json()
+    except Exception:
+        return []
+
+    comments = [
+        child["data"]
+        for child in comments_listing.get("data", {}).get("children", [])
+        if child.get("kind") == "t1"
+    ]
+    comments.sort(key=lambda c: c.get("score", 0), reverse=True)
+    return comments[:COMMENTS_PER_POST]
+
+
 async def search_reddit(
-    reddit: asyncpraw.Reddit, params: SearchParams
+    reddit: httpx.AsyncClient, params: SearchParams
 ) -> list[RedditItem]:
     subreddit_name = "+".join(params.subreddits) if params.subreddits else "all"
-    subreddit = await reddit.subreddit(subreddit_name)
+
+    response = await reddit.get(
+        f"/r/{subreddit_name}/search.json",
+        params={
+            "q": params.query,
+            "sort": "relevance",
+            "t": params.time_filter,
+            "limit": params.limit,
+            "restrict_sr": "on" if params.subreddits else "off",
+        },
+    )
+    response.raise_for_status()
+    listing = response.json()
 
     items: list[RedditItem] = []
-    async for submission in subreddit.search(
-        params.query, sort="relevance", time_filter=params.time_filter, limit=params.limit
-    ):
+    for child in listing.get("data", {}).get("children", []):
+        post = child.get("data", {})
+        if child.get("kind") != "t3":
+            continue
+
+        permalink = post.get("permalink", "")
         items.append(
             RedditItem(
                 kind="post",
-                reddit_id=submission.id,
-                subreddit=str(submission.subreddit),
-                author=str(submission.author) if submission.author else "[deleted]",
-                text=submission.title
-                + ("\n\n" + submission.selftext if submission.selftext else ""),
-                score=submission.score,
-                permalink=f"https://www.reddit.com{submission.permalink}",
-                created_utc=submission.created_utc,
+                reddit_id=post.get("id", ""),
+                subreddit=post.get("subreddit", ""),
+                author=post.get("author") or "[deleted]",
+                text=post.get("title", "")
+                + ("\n\n" + post["selftext"] if post.get("selftext") else ""),
+                score=post.get("score", 0),
+                permalink=f"https://www.reddit.com{permalink}",
+                created_utc=post.get("created_utc", 0.0),
             )
         )
 
-        try:
-            submission.comment_sort = "top"
-            await submission.comments.replace_more(limit=0)
-            top_comments = sorted(
-                submission.comments.list(), key=lambda c: c.score, reverse=True
-            )[:COMMENTS_PER_POST]
-        except Exception:
-            top_comments = []
-
-        for comment in top_comments:
-            if not getattr(comment, "body", None):
+        for comment in await _top_comments(reddit, permalink):
+            body = comment.get("body")
+            if not body:
                 continue
             items.append(
                 RedditItem(
                     kind="comment",
-                    reddit_id=comment.id,
-                    subreddit=str(submission.subreddit),
-                    author=str(comment.author) if comment.author else "[deleted]",
-                    text=comment.body,
-                    score=comment.score,
-                    permalink=f"https://www.reddit.com{comment.permalink}",
-                    created_utc=comment.created_utc,
+                    reddit_id=comment.get("id", ""),
+                    subreddit=post.get("subreddit", ""),
+                    author=comment.get("author") or "[deleted]",
+                    text=body,
+                    score=comment.get("score", 0),
+                    permalink=f"https://www.reddit.com{comment.get('permalink', permalink)}",
+                    created_utc=comment.get("created_utc", 0.0),
                 )
             )
 

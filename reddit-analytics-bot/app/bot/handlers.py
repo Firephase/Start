@@ -7,7 +7,7 @@ from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-import asyncpraw
+import httpx
 
 from app.analytics import build_analytics
 from app.config import Config
@@ -152,7 +152,7 @@ async def cmd_filter(
 async def cmd_run(
     message: Message,
     session_factory: async_sessionmaker,
-    reddit: asyncpraw.Reddit,
+    reddit: httpx.AsyncClient,
 ) -> None:
     async with session_factory() as session:
         chat, search = await _get_chat_and_search(session, message)

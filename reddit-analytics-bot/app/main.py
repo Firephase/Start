@@ -29,7 +29,7 @@ async def main() -> None:
             config=config,
         )
     finally:
-        await reddit.close()
+        await reddit.aclose()
         await bot.session.close()
 
 
