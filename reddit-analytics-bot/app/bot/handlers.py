@@ -13,7 +13,7 @@ from app.analytics import build_analytics
 from app.config import Config
 from app.db import Chat, Report, Search, get_or_create_chat, get_or_create_user
 from app.email_sender import send_email
-from app.reddit_client import SearchParams, search_reddit
+from app.reddit_client import RedditUnavailableError, SearchParams, search_reddit
 from app.report_format import format_email_html, format_telegram_summary
 
 router = Router()
@@ -168,7 +168,11 @@ async def cmd_run(
             time_filter=search.time_filter,
             limit=search.limit,
         )
-        items = await search_reddit(reddit, params)
+        try:
+            items = await search_reddit(reddit, params)
+        except RedditUnavailableError as exc:
+            await message.answer(str(exc))
+            return
         analytics = build_analytics(search.query, items)
 
         report = Report(search_id=search.id, analytics_json=json.dumps(analytics))

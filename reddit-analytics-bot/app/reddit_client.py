@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass, field
 
 import httpx
@@ -5,7 +6,13 @@ import httpx
 from app.config import Config
 
 COMMENTS_PER_POST = 5
-BASE_URL = "https://www.reddit.com"
+BASE_URL = "https://old.reddit.com"
+RETRY_STATUS_CODES = {403, 429}
+RETRY_DELAYS = (1.0, 3.0)
+
+
+class RedditUnavailableError(Exception):
+    pass
 
 
 @dataclass
@@ -31,21 +38,47 @@ class SearchParams:
 def make_reddit_client(config: Config) -> httpx.AsyncClient:
     return httpx.AsyncClient(
         base_url=BASE_URL,
-        headers={"User-Agent": config.reddit_user_agent},
+        headers={
+            "User-Agent": config.reddit_user_agent,
+            "Accept": "application/json",
+        },
         timeout=15.0,
     )
+
+
+async def _get_json(reddit: httpx.AsyncClient, path: str, params: dict) -> dict:
+    last_error: Exception | None = None
+    for attempt, delay in enumerate((0.0, *RETRY_DELAYS)):
+        if delay:
+            await asyncio.sleep(delay)
+        try:
+            response = await reddit.get(path, params=params)
+            if response.status_code in RETRY_STATUS_CODES:
+                last_error = httpx.HTTPStatusError(
+                    f"{response.status_code} {response.reason_phrase}",
+                    request=response.request,
+                    response=response,
+                )
+                continue
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as exc:
+            last_error = exc
+
+    raise RedditUnavailableError(
+        "Reddit сейчас блокирует запросы (403/429). Попробуй ещё раз через пару минут."
+    ) from last_error
 
 
 async def _top_comments(
     reddit: httpx.AsyncClient, permalink: str
 ) -> list[dict]:
     try:
-        response = await reddit.get(
+        _, comments_listing = await _get_json(
+            reddit,
             f"{permalink}.json",
             params={"sort": "top", "limit": COMMENTS_PER_POST},
         )
-        response.raise_for_status()
-        _, comments_listing = response.json()
     except Exception:
         return []
 
@@ -63,7 +96,8 @@ async def search_reddit(
 ) -> list[RedditItem]:
     subreddit_name = "+".join(params.subreddits) if params.subreddits else "all"
 
-    response = await reddit.get(
+    listing = await _get_json(
+        reddit,
         f"/r/{subreddit_name}/search.json",
         params={
             "q": params.query,
@@ -73,8 +107,6 @@ async def search_reddit(
             "restrict_sr": "on" if params.subreddits else "off",
         },
     )
-    response.raise_for_status()
-    listing = response.json()
 
     items: list[RedditItem] = []
     for child in listing.get("data", {}).get("children", []):
