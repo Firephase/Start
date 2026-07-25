@@ -11,7 +11,15 @@ import httpx
 
 from app.analytics import build_analytics
 from app.config import Config
-from app.db import Chat, Report, Search, get_or_create_chat, get_or_create_user
+from app.db import (
+    Chat,
+    Report,
+    Search,
+    get_or_create_chat,
+    get_or_create_user,
+    list_allowed_users,
+    set_user_allowed,
+)
 from app.email_sender import send_email
 from app.reddit_client import RedditUnavailableError, SearchParams, search_reddit
 from app.report_format import format_email_html, format_telegram_summary
@@ -46,19 +54,35 @@ HELP_TEXT = (
 )
 
 
+OWNER_HELP_TEXT = (
+    "\n\nOwner commands:\n"
+    "/allow <telegram_id> — grant a user access to the bot\n"
+    "/deny <telegram_id> — revoke a user's access\n"
+    "/allowlist — list users with access"
+)
+
+
 @router.message(Command("start"))
-async def cmd_start(message: Message, session_factory: async_sessionmaker) -> None:
+async def cmd_start(
+    message: Message, session_factory: async_sessionmaker, config: Config
+) -> None:
     async with session_factory() as session:
         user = await get_or_create_user(session, message.from_user.id)
         await get_or_create_chat(session, message.chat.id, user)
         await session.commit()
 
-    await message.answer(HELP_TEXT)
+    text = f"Your Telegram ID: {message.from_user.id}\n\n" + HELP_TEXT
+    if message.from_user.id == config.bot_owner_id:
+        text += OWNER_HELP_TEXT
+    await message.answer(text)
 
 
 @router.message(Command("help"))
-async def cmd_help(message: Message) -> None:
-    await message.answer(HELP_TEXT)
+async def cmd_help(message: Message, config: Config) -> None:
+    text = HELP_TEXT
+    if message.from_user.id == config.bot_owner_id:
+        text += OWNER_HELP_TEXT
+    await message.answer(text)
 
 
 @router.message(Command("setemail"))
@@ -247,3 +271,72 @@ async def cmd_email(
         await session.commit()
 
     await message.answer(f"Report sent to {user.email}")
+
+
+def _require_owner(message: Message, config: Config) -> bool:
+    return message.from_user is not None and message.from_user.id == config.bot_owner_id
+
+
+@router.message(Command("allow"))
+async def cmd_allow(
+    message: Message,
+    command: CommandObject,
+    session_factory: async_sessionmaker,
+    config: Config,
+) -> None:
+    if not _require_owner(message, config):
+        await message.answer("Only the bot owner can manage the allowlist.")
+        return
+
+    arg = (command.args or "").strip()
+    if not arg.isdigit():
+        await message.answer("Usage: /allow <telegram_id>")
+        return
+
+    async with session_factory() as session:
+        await set_user_allowed(session, int(arg), True)
+        await session.commit()
+
+    await message.answer(f"User {arg} can now use the bot.")
+
+
+@router.message(Command("deny"))
+async def cmd_deny(
+    message: Message,
+    command: CommandObject,
+    session_factory: async_sessionmaker,
+    config: Config,
+) -> None:
+    if not _require_owner(message, config):
+        await message.answer("Only the bot owner can manage the allowlist.")
+        return
+
+    arg = (command.args or "").strip()
+    if not arg.isdigit():
+        await message.answer("Usage: /deny <telegram_id>")
+        return
+
+    async with session_factory() as session:
+        await set_user_allowed(session, int(arg), False)
+        await session.commit()
+
+    await message.answer(f"User {arg} no longer has access.")
+
+
+@router.message(Command("allowlist"))
+async def cmd_allowlist(
+    message: Message, session_factory: async_sessionmaker, config: Config
+) -> None:
+    if not _require_owner(message, config):
+        await message.answer("Only the bot owner can manage the allowlist.")
+        return
+
+    async with session_factory() as session:
+        users = await list_allowed_users(session)
+
+    if not users:
+        await message.answer("No users have been granted access yet.")
+        return
+
+    lines = "\n".join(f"• {u.telegram_id}" for u in users)
+    await message.answer(f"Users with access:\n{lines}")

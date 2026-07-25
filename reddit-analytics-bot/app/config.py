@@ -16,6 +16,7 @@ def _require(name: str) -> str:
 @dataclass(frozen=True)
 class Config:
     telegram_bot_token: str
+    bot_owner_id: int
     reddit_user_agent: str
     resend_api_key: str
     resend_from_email: str
@@ -23,8 +24,15 @@ class Config:
 
     @classmethod
     def load(cls) -> "Config":
+        owner_id_raw = _require("BOT_OWNER_ID")
+        try:
+            bot_owner_id = int(owner_id_raw)
+        except ValueError:
+            raise RuntimeError("BOT_OWNER_ID must be a Telegram numeric user id")
+
         return cls(
             telegram_bot_token=_require("TELEGRAM_BOT_TOKEN"),
+            bot_owner_id=bot_owner_id,
             reddit_user_agent=os.getenv(
                 "REDDIT_USER_AGENT", "reddit-analytics-bot/0.1"
             ),

@@ -17,6 +17,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     telegram_id: Mapped[int] = mapped_column(unique=True, index=True)
     email: Mapped[Optional[str]] = mapped_column(String(320), nullable=True)
+    is_allowed: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         default=datetime.datetime.utcnow
     )
@@ -85,6 +86,20 @@ async def get_or_create_user(session: AsyncSession, telegram_id: int) -> User:
         session.add(user)
         await session.flush()
     return user
+
+
+async def set_user_allowed(
+    session: AsyncSession, telegram_id: int, allowed: bool
+) -> User:
+    user = await get_or_create_user(session, telegram_id)
+    user.is_allowed = allowed
+    await session.flush()
+    return user
+
+
+async def list_allowed_users(session: AsyncSession) -> list[User]:
+    result = await session.execute(select(User).where(User.is_allowed.is_(True)))
+    return list(result.scalars().all())
 
 
 async def get_or_create_chat(

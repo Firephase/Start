@@ -8,6 +8,8 @@ services:
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+      - key: BOT_OWNER_ID
+        sync: false
       - key: REDDIT_USER_AGENT
         sync: false
       - key: RESEND_API_KEY
