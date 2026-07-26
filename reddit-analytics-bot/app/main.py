@@ -15,7 +15,7 @@ async def main() -> None:
     config = Config.load()
 
     session_factory = await create_session_factory(config.database_url)
-    reddit = make_reddit_client()
+    reddit = await make_reddit_client()
 
     bot = Bot(token=config.telegram_bot_token)
     dispatcher = Dispatcher()

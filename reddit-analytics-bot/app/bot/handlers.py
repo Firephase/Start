@@ -7,7 +7,6 @@ from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-import httpx
 
 from app.analytics import build_analytics
 from app.config import Config
@@ -21,7 +20,7 @@ from app.db import (
     set_user_allowed,
 )
 from app.email_sender import send_email
-from app.reddit_client import RedditUnavailableError, SearchParams, search_reddit
+from app.reddit_client import RedditClient, RedditUnavailableError, SearchParams, search_reddit
 from app.report_format import format_email_html, format_telegram_summary
 
 router = Router()
@@ -176,7 +175,7 @@ async def cmd_filter(
 async def cmd_run(
     message: Message,
     session_factory: async_sessionmaker,
-    reddit: httpx.AsyncClient,
+    reddit: RedditClient,
 ) -> None:
     async with session_factory() as session:
         chat, search = await _get_chat_and_search(session, message)

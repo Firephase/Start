@@ -1,27 +1,25 @@
 import asyncio
+import json as json_lib
 from dataclasses import dataclass, field
+from urllib.parse import urlencode
 
-import httpx
+from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
 
 COMMENTS_PER_POST = 5
 BASE_URL = "https://old.reddit.com"
 RETRY_STATUS_CODES = {403, 429}
 RETRY_DELAYS = (1.0, 3.0)
 
-# Mimic a real desktop Chrome browser. A distinctive "bot" User-Agent is
-# what tends to trip Reddit's anti-bot WAF on the public .json endpoints,
-# especially from datacenter/VPS IPs.
-BROWSER_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://old.reddit.com/",
-    "Sec-Fetch-Mode": "cors",
-    "Sec-Fetch-Site": "same-origin",
-}
+# fetch() executed inside a real headless Chromium tab: genuine TLS/JS
+# fingerprint, not just spoofed headers on a Python HTTP client.
+_FETCH_JS = """async (url) => {
+    try {
+        const res = await fetch(url, { headers: { "Accept": "application/json" } });
+        return { status: res.status, body: await res.text() };
+    } catch (e) {
+        return { status: 0, body: String(e) };
+    }
+}"""
 
 
 class RedditUnavailableError(Exception):
@@ -48,47 +46,66 @@ class SearchParams:
     limit: int = 50
 
 
-def make_reddit_client() -> httpx.AsyncClient:
-    return httpx.AsyncClient(
-        base_url=BASE_URL,
-        headers=BROWSER_HEADERS,
-        timeout=15.0,
-        follow_redirects=True,
-    )
+class RedditClient:
+    def __init__(
+        self, playwright: Playwright, browser: Browser, context: BrowserContext, page: Page
+    ) -> None:
+        self._playwright = playwright
+        self._browser = browser
+        self._context = context
+        self._page = page
+        self._lock = asyncio.Lock()
+
+    async def fetch(self, url: str) -> tuple[int, str]:
+        async with self._lock:
+            result = await self._page.evaluate(_FETCH_JS, url)
+        return result["status"], result["body"]
+
+    async def aclose(self) -> None:
+        await self._context.close()
+        await self._browser.close()
+        await self._playwright.stop()
 
 
-async def _get_json(reddit: httpx.AsyncClient, path: str, params: dict) -> dict:
+async def make_reddit_client() -> RedditClient:
+    playwright = await async_playwright().start()
+    browser = await playwright.chromium.launch(headless=True)
+    context = await browser.new_context(locale="en-US")
+    page = await context.new_page()
+    await page.goto(f"{BASE_URL}/", wait_until="domcontentloaded")
+    return RedditClient(playwright, browser, context, page)
+
+
+async def _get_json(reddit: RedditClient, path: str, params: dict):
+    url = f"{BASE_URL}{path}?{urlencode(params)}"
     last_error: Exception | None = None
-    for attempt, delay in enumerate((0.0, *RETRY_DELAYS)):
+    for delay in (0.0, *RETRY_DELAYS):
         if delay:
             await asyncio.sleep(delay)
+        status, body = await reddit.fetch(url)
+        if status == 0 or status in RETRY_STATUS_CODES:
+            last_error = RuntimeError(f"HTTP {status}: {body[:200]}")
+            continue
+        if status >= 400:
+            raise RedditUnavailableError(f"Reddit returned HTTP {status} for this request.")
         try:
-            response = await reddit.get(path, params=params)
-            if response.status_code in RETRY_STATUS_CODES:
-                last_error = httpx.HTTPStatusError(
-                    f"{response.status_code} {response.reason_phrase}",
-                    request=response.request,
-                    response=response,
-                )
-                continue
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPError as exc:
-            last_error = exc
+            return json_lib.loads(body)
+        except ValueError as exc:
+            raise RedditUnavailableError(
+                "Reddit returned an unexpected (non-JSON) response."
+            ) from exc
 
     raise RedditUnavailableError(
         "Reddit is blocking requests right now (403/429). Try again in a couple of minutes."
     ) from last_error
 
 
-async def _top_comments(
-    reddit: httpx.AsyncClient, permalink: str
-) -> list[dict]:
+async def _top_comments(reddit: RedditClient, permalink: str) -> list[dict]:
     try:
         _, comments_listing = await _get_json(
             reddit,
             f"{permalink}.json",
-            params={"sort": "top", "limit": COMMENTS_PER_POST},
+            {"sort": "top", "limit": COMMENTS_PER_POST},
         )
     except Exception:
         return []
@@ -103,14 +120,14 @@ async def _top_comments(
 
 
 async def search_reddit(
-    reddit: httpx.AsyncClient, params: SearchParams
+    reddit: RedditClient, params: SearchParams
 ) -> list[RedditItem]:
     subreddit_name = "+".join(params.subreddits) if params.subreddits else "all"
 
     listing = await _get_json(
         reddit,
         f"/r/{subreddit_name}/search.json",
-        params={
+        {
             "q": params.query,
             "sort": "relevance",
             "t": params.time_filter,

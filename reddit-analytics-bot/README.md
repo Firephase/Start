@@ -67,9 +67,15 @@ Reddit (`old.reddit.com/.../search.json`) без авторизации, с за
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+playwright install --with-deps chromium
 cp .env.example .env  # и заполните значения
 python -m app.main
 ```
+
+Бот открывает поиск через headless Chromium (Playwright) — это обходит
+антибот-защиту Reddit лучше, чем обычные HTTP-запросы, но требует, чтобы
+браузер был установлен (шаг `playwright install` выше). При запуске через
+Docker браузер уже встроен в образ, ничего доустанавливать не нужно.
 
 ## Деплой (Render)
 
