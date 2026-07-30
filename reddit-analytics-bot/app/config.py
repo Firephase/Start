@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -20,6 +21,7 @@ class Config:
     resend_api_key: str
     resend_from_email: str
     database_url: str
+    stackexchange_key: Optional[str]
 
     @classmethod
     def load(cls) -> "Config":
@@ -37,4 +39,5 @@ class Config:
             database_url=os.getenv(
                 "DATABASE_URL", "sqlite+aiosqlite:///./data/bot.db"
             ),
+            stackexchange_key=os.getenv("STACKEXCHANGE_KEY") or None,
         )

@@ -1,9 +1,10 @@
 import asyncio
 import json as json_lib
-from dataclasses import dataclass, field
 from urllib.parse import urlencode
 
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
+
+from app.models import SearchItem, SearchParams
 
 COMMENTS_PER_POST = 5
 BASE_URL = "https://old.reddit.com"
@@ -24,26 +25,6 @@ _FETCH_JS = """async (url) => {
 
 class RedditUnavailableError(Exception):
     pass
-
-
-@dataclass
-class RedditItem:
-    kind: str  # "post" or "comment"
-    reddit_id: str
-    subreddit: str
-    author: str
-    text: str
-    score: int
-    permalink: str
-    created_utc: float
-
-
-@dataclass
-class SearchParams:
-    query: str
-    subreddits: list[str] = field(default_factory=list)
-    time_filter: str = "all"  # hour, day, week, month, year, all
-    limit: int = 50
 
 
 class RedditClient:
@@ -121,7 +102,7 @@ async def _top_comments(reddit: RedditClient, permalink: str) -> list[dict]:
 
 async def search_reddit(
     reddit: RedditClient, params: SearchParams
-) -> list[RedditItem]:
+) -> list[SearchItem]:
     subreddit_name = "+".join(params.subreddits) if params.subreddits else "all"
 
     listing = await _get_json(
@@ -136,18 +117,20 @@ async def search_reddit(
         },
     )
 
-    items: list[RedditItem] = []
+    items: list[SearchItem] = []
     for child in listing.get("data", {}).get("children", []):
         post = child.get("data", {})
         if child.get("kind") != "t3":
             continue
 
         permalink = post.get("permalink", "")
+        group = f"r/{post.get('subreddit', '')}"
         items.append(
-            RedditItem(
+            SearchItem(
                 kind="post",
-                reddit_id=post.get("id", ""),
-                subreddit=post.get("subreddit", ""),
+                source="reddit",
+                item_id=post.get("id", ""),
+                group=group,
                 author=post.get("author") or "[deleted]",
                 text=post.get("title", "")
                 + ("\n\n" + post["selftext"] if post.get("selftext") else ""),
@@ -162,10 +145,11 @@ async def search_reddit(
             if not body:
                 continue
             items.append(
-                RedditItem(
+                SearchItem(
                     kind="comment",
-                    reddit_id=comment.get("id", ""),
-                    subreddit=post.get("subreddit", ""),
+                    source="reddit",
+                    item_id=comment.get("id", ""),
+                    group=group,
                     author=comment.get("author") or "[deleted]",
                     text=body,
                     score=comment.get("score", 0),

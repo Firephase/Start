@@ -1,7 +1,9 @@
+import asyncio
 import datetime
 import json
 import re
 
+import httpx
 from aiogram import Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
@@ -20,8 +22,11 @@ from app.db import (
     set_user_allowed,
 )
 from app.email_sender import send_email
-from app.reddit_client import RedditClient, RedditUnavailableError, SearchParams, search_reddit
+from app.hackernews_client import search_hackernews
+from app.models import SearchItem, SearchParams
+from app.reddit_client import RedditClient, RedditUnavailableError, search_reddit
 from app.report_format import format_email_html, format_telegram_summary
+from app.stackexchange_client import search_stackexchange
 
 router = Router()
 
@@ -41,8 +46,8 @@ async def _get_chat_and_search(
 
 
 HELP_TEXT = (
-    "Hi! I search Reddit for your query and send you analytics with links "
-    "to the sources.\n\n"
+    "Hi! I search Reddit, Hacker News, and Stack Overflow for your query and "
+    "send you analytics with links to the sources.\n\n"
     "1. /setemail you@example.com — where to send reports\n"
     "2. /search <query> — start a search\n"
     "3. /filter subreddit:python days:30 limit:100 — refine filters\n"
@@ -171,11 +176,40 @@ async def cmd_filter(
     )
 
 
+async def _search_all_sources(
+    reddit: RedditClient,
+    http_client: httpx.AsyncClient,
+    config: Config,
+    params: SearchParams,
+) -> tuple[list[SearchItem], list[str]]:
+    results = await asyncio.gather(
+        search_reddit(reddit, params),
+        search_hackernews(http_client, params),
+        search_stackexchange(http_client, params, api_key=config.stackexchange_key),
+        return_exceptions=True,
+    )
+
+    labels = ("Reddit", "Hacker News", "Stack Overflow")
+    items: list[SearchItem] = []
+    errors: list[str] = []
+    for label, result in zip(labels, results):
+        if isinstance(result, RedditUnavailableError):
+            errors.append(f"{label}: {result}")
+        elif isinstance(result, Exception):
+            errors.append(f"{label}: request failed ({result}).")
+        else:
+            items.extend(result)
+
+    return items, errors
+
+
 @router.message(Command("run"))
 async def cmd_run(
     message: Message,
     session_factory: async_sessionmaker,
     reddit: RedditClient,
+    http_client: httpx.AsyncClient,
+    config: Config,
 ) -> None:
     async with session_factory() as session:
         chat, search = await _get_chat_and_search(session, message)
@@ -183,7 +217,9 @@ async def cmd_run(
             await message.answer("Start a search first with /search <query>")
             return
 
-        await message.answer(f"Searching Reddit for «{search.query}»…")
+        await message.answer(
+            f"Searching Reddit, Hacker News, and Stack Overflow for «{search.query}»…"
+        )
 
         params = SearchParams(
             query=search.query,
@@ -191,18 +227,24 @@ async def cmd_run(
             time_filter=search.time_filter,
             limit=search.limit,
         )
-        try:
-            items = await search_reddit(reddit, params)
-        except RedditUnavailableError as exc:
-            await message.answer(str(exc))
+        items, errors = await _search_all_sources(reddit, http_client, config, params)
+
+        if not items:
+            await message.answer(
+                "Couldn't get results from any source right now.\n" + "\n".join(errors)
+            )
             return
+
         analytics = build_analytics(search.query, items)
 
         report = Report(search_id=search.id, analytics_json=json.dumps(analytics))
         session.add(report)
         await session.commit()
 
-    await message.answer(format_telegram_summary(analytics), parse_mode="HTML")
+    text = format_telegram_summary(analytics)
+    if errors:
+        text += "\n\n⚠️ " + " / ".join(errors)
+    await message.answer(text, parse_mode="HTML")
 
 
 @router.message(Command("report"))
@@ -262,7 +304,7 @@ async def cmd_email(
             api_key=config.resend_api_key,
             from_email=config.resend_from_email,
             to_email=user.email,
-            subject=f"Reddit analytics: {analytics['query']}",
+            subject=f"Search analytics: {analytics['query']}",
             html=html,
         )
 

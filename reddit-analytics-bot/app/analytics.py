@@ -3,7 +3,7 @@ from collections import Counter
 
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
-from app.reddit_client import RedditItem
+from app.models import SearchItem
 
 TOP_N = 10
 TOP_KEYWORDS = 20
@@ -41,7 +41,7 @@ def _sentiment_label(compound: float) -> str:
     return "neutral"
 
 
-def build_analytics(query: str, items: list[RedditItem]) -> dict:
+def build_analytics(query: str, items: list[SearchItem]) -> dict:
     analyzer = SentimentIntensityAnalyzer()
 
     top_posts = sorted(
@@ -52,24 +52,26 @@ def build_analytics(query: str, items: list[RedditItem]) -> dict:
     )[:TOP_N]
 
     word_counter: Counter[str] = Counter()
-    subreddit_counter: Counter[str] = Counter()
-    subreddit_score_sum: Counter[str] = Counter()
+    group_counter: Counter[str] = Counter()
+    group_score_sum: Counter[str] = Counter()
+    source_counter: Counter[str] = Counter()
     sentiment_counter: Counter[str] = Counter()
 
     for item in items:
         word_counter.update(_tokenize(item.text))
-        subreddit_counter[item.subreddit] += 1
-        subreddit_score_sum[item.subreddit] += item.score
+        group_counter[item.group] += 1
+        group_score_sum[item.group] += item.score
+        source_counter[item.source] += 1
         compound = analyzer.polarity_scores(item.text)["compound"]
         sentiment_counter[_sentiment_label(compound)] += 1
 
-    subreddit_stats = [
+    group_stats = [
         {
-            "subreddit": name,
+            "group": name,
             "items": count,
-            "avg_score": round(subreddit_score_sum[name] / count, 1),
+            "avg_score": round(group_score_sum[name] / count, 1),
         }
-        for name, count in subreddit_counter.most_common()
+        for name, count in group_counter.most_common()
     ]
 
     total_sentiment = sum(sentiment_counter.values()) or 1
@@ -80,7 +82,8 @@ def build_analytics(query: str, items: list[RedditItem]) -> dict:
         "top_posts": [_item_to_dict(i) for i in top_posts],
         "top_comments": [_item_to_dict(i) for i in top_comments],
         "keyword_frequency": word_counter.most_common(TOP_KEYWORDS),
-        "subreddit_stats": subreddit_stats,
+        "group_stats": group_stats,
+        "source_counts": dict(source_counter.most_common()),
         "sentiment": {
             "positive": sentiment_counter["positive"],
             "negative": sentiment_counter["negative"],
@@ -92,13 +95,14 @@ def build_analytics(query: str, items: list[RedditItem]) -> dict:
     }
 
 
-def _item_to_dict(item: RedditItem) -> dict:
+def _item_to_dict(item: SearchItem) -> dict:
     snippet = item.text.strip().replace("\n", " ")
     if len(snippet) > 300:
         snippet = snippet[:300] + "…"
     return {
         "kind": item.kind,
-        "subreddit": item.subreddit,
+        "source": item.source,
+        "group": item.group,
         "author": item.author,
         "score": item.score,
         "permalink": item.permalink,

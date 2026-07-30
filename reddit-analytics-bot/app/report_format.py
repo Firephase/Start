@@ -1,16 +1,30 @@
 from html import escape
 
+SOURCE_LABELS = {
+    "reddit": "Reddit",
+    "hackernews": "Hacker News",
+    "stackexchange": "Stack Exchange",
+}
+
+
+def _sources_line(source_counts: dict) -> str:
+    return ", ".join(
+        f"{SOURCE_LABELS.get(name, name)}: {count}"
+        for name, count in source_counts.items()
+    )
+
 
 def format_telegram_summary(analytics: dict) -> str:
     lines = [
         f"📊 Report for query: <b>{escape(analytics['query'])}</b>",
-        f"Items found: {analytics['total_items']}",
+        f"Items found: {analytics['total_items']} "
+        f"({escape(_sources_line(analytics['source_counts']))})",
         "",
         "<b>Top posts:</b>",
     ]
     for post in analytics["top_posts"][:5]:
         lines.append(
-            f"• [{post['score']}▲] r/{escape(post['subreddit'])}: "
+            f"• [{post['score']}▲] {escape(post['group'])}: "
             f"{escape(post['snippet'][:120])} — {post['permalink']}"
         )
 
@@ -18,7 +32,7 @@ def format_telegram_summary(analytics: dict) -> str:
     lines.append("<b>Top comments:</b>")
     for comment in analytics["top_comments"][:5]:
         lines.append(
-            f"• [{comment['score']}▲] r/{escape(comment['subreddit'])}: "
+            f"• [{comment['score']}▲] {escape(comment['group'])}: "
             f"{escape(comment['snippet'][:120])} — {comment['permalink']}"
         )
 
@@ -45,7 +59,7 @@ def format_telegram_summary(analytics: dict) -> str:
 def format_email_html(analytics: dict) -> str:
     def item_row(item: dict) -> str:
         return (
-            f"<li><strong>[{item['score']}▲] r/{escape(item['subreddit'])}</strong> "
+            f"<li><strong>[{item['score']}▲] {escape(item['group'])}</strong> "
             f"by {escape(item['author'])}<br>"
             f"{escape(item['snippet'])}<br>"
             f"<a href=\"{escape(item['permalink'])}\">{escape(item['permalink'])}</a></li>"
@@ -56,10 +70,10 @@ def format_email_html(analytics: dict) -> str:
         item_row(c) for c in analytics["top_comments"]
     ) or "<li>—</li>"
 
-    subreddit_rows = "\n".join(
-        f"<tr><td>r/{escape(s['subreddit'])}</td><td>{s['items']}</td>"
+    group_rows = "\n".join(
+        f"<tr><td>{escape(s['group'])}</td><td>{s['items']}</td>"
         f"<td>{s['avg_score']}</td></tr>"
-        for s in analytics["subreddit_stats"]
+        for s in analytics["group_stats"]
     )
 
     keyword_row = ", ".join(
@@ -71,8 +85,9 @@ def format_email_html(analytics: dict) -> str:
     return f"""
     <html>
     <body style="font-family: sans-serif; max-width: 700px; margin: 0 auto;">
-      <h2>Reddit analytics for query: {escape(analytics['query'])}</h2>
-      <p>Total items analyzed: {analytics['total_items']}</p>
+      <h2>Analytics for query: {escape(analytics['query'])}</h2>
+      <p>Total items analyzed: {analytics['total_items']}
+         ({escape(_sources_line(analytics['source_counts']))})</p>
 
       <h3>Sentiment</h3>
       <p>👍 Positive: {sentiment['positive_pct']}% &nbsp;
@@ -88,10 +103,10 @@ def format_email_html(analytics: dict) -> str:
       <h3>Keyword frequency</h3>
       <p>{keyword_row}</p>
 
-      <h3>Source subreddits</h3>
+      <h3>Top groups (subreddits / sites)</h3>
       <table border="1" cellpadding="6" cellspacing="0">
-        <tr><th>Subreddit</th><th>Items</th><th>Avg score</th></tr>
-        {subreddit_rows}
+        <tr><th>Group</th><th>Items</th><th>Avg score</th></tr>
+        {group_rows}
       </table>
     </body>
     </html>
