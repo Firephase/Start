@@ -24,7 +24,6 @@ from app.db import (
 from app.email_sender import send_email
 from app.hackernews_client import search_hackernews
 from app.models import SearchItem, SearchParams
-from app.reddit_client import RedditClient, RedditUnavailableError, search_reddit
 from app.report_format import format_email_html, format_telegram_summary
 from app.stackexchange_client import search_stackexchange
 
@@ -46,11 +45,11 @@ async def _get_chat_and_search(
 
 
 HELP_TEXT = (
-    "Hi! I search Reddit, Hacker News, and Stack Overflow for your query and "
+    "Hi! I search Hacker News and Stack Overflow for your query and "
     "send you analytics with links to the sources.\n\n"
     "1. /setemail you@example.com — where to send reports\n"
     "2. /search <query> — start a search\n"
-    "3. /filter subreddit:python days:30 limit:100 — refine filters\n"
+    "3. /filter days:30 limit:100 — refine filters\n"
     "4. /run — (re)run the search with the current filters\n"
     "5. /report — show the latest report in this chat\n"
     "6. /email — send the latest report by email\n"
@@ -138,8 +137,8 @@ async def cmd_filter(
     args = (command.args or "").strip()
     if not args:
         await message.answer(
-            "Usage: /filter subreddit:python,news days:30 limit:100\n"
-            "Supported keys: subreddit, days (or time_filter), limit"
+            "Usage: /filter days:30 limit:100\n"
+            "Supported keys: days (or time_filter), limit"
         )
         return
 
@@ -154,9 +153,7 @@ async def cmd_filter(
                 continue
             key, value = token.split(":", 1)
             key = key.lower()
-            if key == "subreddit":
-                search.set_subreddits([s.strip() for s in value.split(",") if s.strip()])
-            elif key in ("time_filter", "days"):
+            if key in ("time_filter", "days"):
                 if key == "days":
                     days_map = {
                         "1": "day", "7": "week", "30": "month", "365": "year",
@@ -171,31 +168,27 @@ async def cmd_filter(
         await session.commit()
 
     await message.answer(
-        f"Filters updated: subreddits={search.get_subreddits() or 'all'}, "
-        f"time_filter={search.time_filter}, limit={search.limit}. Run /run."
+        f"Filters updated: time_filter={search.time_filter}, "
+        f"limit={search.limit}. Run /run."
     )
 
 
 async def _search_all_sources(
-    reddit: RedditClient,
     http_client: httpx.AsyncClient,
     config: Config,
     params: SearchParams,
 ) -> tuple[list[SearchItem], list[str]]:
     results = await asyncio.gather(
-        search_reddit(reddit, params),
         search_hackernews(http_client, params),
         search_stackexchange(http_client, params, api_key=config.stackexchange_key),
         return_exceptions=True,
     )
 
-    labels = ("Reddit", "Hacker News", "Stack Overflow")
+    labels = ("Hacker News", "Stack Overflow")
     items: list[SearchItem] = []
     errors: list[str] = []
     for label, result in zip(labels, results):
-        if isinstance(result, RedditUnavailableError):
-            errors.append(f"{label}: {result}")
-        elif isinstance(result, Exception):
+        if isinstance(result, Exception):
             errors.append(f"{label}: request failed ({result}).")
         else:
             items.extend(result)
@@ -207,7 +200,6 @@ async def _search_all_sources(
 async def cmd_run(
     message: Message,
     session_factory: async_sessionmaker,
-    reddit: RedditClient,
     http_client: httpx.AsyncClient,
     config: Config,
 ) -> None:
@@ -218,16 +210,15 @@ async def cmd_run(
             return
 
         await message.answer(
-            f"Searching Reddit, Hacker News, and Stack Overflow for «{search.query}»…"
+            f"Searching Hacker News and Stack Overflow for «{search.query}»…"
         )
 
         params = SearchParams(
             query=search.query,
-            subreddits=search.get_subreddits(),
             time_filter=search.time_filter,
             limit=search.limit,
         )
-        items, errors = await _search_all_sources(reddit, http_client, config, params)
+        items, errors = await _search_all_sources(http_client, config, params)
 
         if not items:
             await message.answer(

@@ -1,12 +1,12 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
 class SearchItem:
     kind: str  # "post" or "comment"
-    source: str  # "reddit", "hackernews", "stackexchange"
+    source: str  # "hackernews", "stackexchange"
     item_id: str
-    group: str  # display label: "r/python", "Hacker News", "stackoverflow"
+    group: str  # display label: "Hacker News", "stackoverflow"
     author: str
     text: str
     score: int
@@ -17,6 +17,5 @@ class SearchItem:
 @dataclass
 class SearchParams:
     query: str
-    subreddits: list[str] = field(default_factory=list)
     time_filter: str = "all"  # hour, day, week, month, year, all
     limit: int = 50

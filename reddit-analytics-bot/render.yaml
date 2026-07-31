@@ -3,7 +3,7 @@ services:
     name: reddit-analytics-bot
     env: python
     plan: starter
-    buildCommand: pip install -r requirements.txt && playwright install --with-deps chromium
+    buildCommand: pip install -r requirements.txt
     startCommand: python -m app.main
     envVars:
       - key: TELEGRAM_BOT_TOKEN

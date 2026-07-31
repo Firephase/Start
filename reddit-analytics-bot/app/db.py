@@ -1,8 +1,7 @@
 import datetime
-import json
 from typing import Optional
 
-from sqlalchemy import ForeignKey, JSON, String, Text, select
+from sqlalchemy import ForeignKey, String, Text, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -40,9 +39,6 @@ class Search(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     chat_id: Mapped[int] = mapped_column(ForeignKey("chats.id"))
     query: Mapped[str] = mapped_column(String(300))
-    subreddits: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True
-    )  # JSON list of subreddit names, empty/None = "all"
     time_filter: Mapped[str] = mapped_column(String(20), default="all")
     limit: Mapped[int] = mapped_column(default=50)
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -51,12 +47,6 @@ class Search(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(
         default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
     )
-
-    def get_subreddits(self) -> list[str]:
-        return json.loads(self.subreddits) if self.subreddits else []
-
-    def set_subreddits(self, names: list[str]) -> None:
-        self.subreddits = json.dumps(names) if names else None
 
 
 class Report(Base):

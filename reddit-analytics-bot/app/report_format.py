@@ -1,7 +1,6 @@
 from html import escape
 
 SOURCE_LABELS = {
-    "reddit": "Reddit",
     "hackernews": "Hacker News",
     "stackexchange": "Stack Exchange",
 }
@@ -103,7 +102,7 @@ def format_email_html(analytics: dict) -> str:
       <h3>Keyword frequency</h3>
       <p>{keyword_row}</p>
 
-      <h3>Top groups (subreddits / sites)</h3>
+      <h3>Top groups</h3>
       <table border="1" cellpadding="6" cellspacing="0">
         <tr><th>Group</th><th>Items</th><th>Avg score</th></tr>
         {group_rows}
