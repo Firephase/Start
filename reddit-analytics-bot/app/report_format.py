@@ -3,6 +3,8 @@ from html import escape
 SOURCE_LABELS = {
     "hackernews": "Hacker News",
     "stackexchange": "Stack Exchange",
+    "bluesky": "Bluesky",
+    "mastodon": "Mastodon",
 }
 
 

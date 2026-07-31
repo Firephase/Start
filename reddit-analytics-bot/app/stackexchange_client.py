@@ -2,19 +2,10 @@ import time
 
 import httpx
 
-from app.models import SearchItem, SearchParams
+from app.models import SearchItem, SearchParams, TIME_FILTER_SECONDS
 
 SEARCH_URL = "https://api.stackexchange.com/2.3/search/advanced"
 DEFAULT_SITE = "stackoverflow"
-
-TIME_FILTER_SECONDS = {
-    "hour": 3600,
-    "day": 86400,
-    "week": 604800,
-    "month": 2592000,
-    "year": 31536000,
-    "all": None,
-}
 
 
 async def search_stackexchange(

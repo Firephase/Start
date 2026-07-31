@@ -10,6 +10,12 @@ services:
         sync: false
       - key: BOT_OWNER_ID
         sync: false
+      - key: STACKEXCHANGE_KEY
+        sync: false
+      - key: MASTODON_ACCESS_TOKEN
+        sync: false
+      - key: MASTODON_INSTANCE
+        value: https://mastodon.social
       - key: RESEND_API_KEY
         sync: false
       - key: RESEND_FROM_EMAIL

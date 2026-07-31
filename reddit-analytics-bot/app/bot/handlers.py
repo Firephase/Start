@@ -21,8 +21,10 @@ from app.db import (
     list_allowed_users,
     set_user_allowed,
 )
+from app.bluesky_client import search_bluesky
 from app.email_sender import send_email
 from app.hackernews_client import search_hackernews
+from app.mastodon_client import search_mastodon
 from app.models import SearchItem, SearchParams
 from app.report_format import format_email_html, format_telegram_summary
 from app.stackexchange_client import search_stackexchange
@@ -45,8 +47,9 @@ async def _get_chat_and_search(
 
 
 HELP_TEXT = (
-    "Hi! I search Hacker News and Stack Overflow for your query and "
-    "send you analytics with links to the sources.\n\n"
+    "Hi! I search Hacker News, Stack Overflow, and Bluesky (plus Mastodon "
+    "if the owner configured it) for your query and send you analytics "
+    "with links to the sources.\n\n"
     "1. /setemail you@example.com — where to send reports\n"
     "2. /search <query> — start a search\n"
     "3. /filter days:30 limit:100 — refine filters\n"
@@ -173,21 +176,44 @@ async def cmd_filter(
     )
 
 
+def _source_names(config: Config) -> list[str]:
+    names = ["Hacker News", "Stack Overflow", "Bluesky"]
+    if config.mastodon_access_token:
+        names.append("Mastodon")
+    return names
+
+
 async def _search_all_sources(
     http_client: httpx.AsyncClient,
     config: Config,
     params: SearchParams,
 ) -> tuple[list[SearchItem], list[str]]:
-    results = await asyncio.gather(
-        search_hackernews(http_client, params),
-        search_stackexchange(http_client, params, api_key=config.stackexchange_key),
-        return_exceptions=True,
-    )
+    sources: list[tuple[str, "asyncio.Future"]] = [
+        ("Hacker News", search_hackernews(http_client, params)),
+        (
+            "Stack Overflow",
+            search_stackexchange(http_client, params, api_key=config.stackexchange_key),
+        ),
+        ("Bluesky", search_bluesky(http_client, params)),
+    ]
+    if config.mastodon_access_token:
+        sources.append(
+            (
+                "Mastodon",
+                search_mastodon(
+                    http_client,
+                    params,
+                    config.mastodon_access_token,
+                    config.mastodon_instance,
+                ),
+            )
+        )
 
-    labels = ("Hacker News", "Stack Overflow")
+    results = await asyncio.gather(*(coro for _, coro in sources), return_exceptions=True)
+
     items: list[SearchItem] = []
     errors: list[str] = []
-    for label, result in zip(labels, results):
+    for (label, _), result in zip(sources, results):
         if isinstance(result, Exception):
             errors.append(f"{label}: request failed ({result}).")
         else:
@@ -209,15 +235,15 @@ async def cmd_run(
             await message.answer("Start a search first with /search <query>")
             return
 
-        await message.answer(
-            f"Searching Hacker News and Stack Overflow for «{search.query}»…"
-        )
-
         params = SearchParams(
             query=search.query,
             time_filter=search.time_filter,
             limit=search.limit,
         )
+        await message.answer(
+            f"Searching {', '.join(_source_names(config))} for «{search.query}»…"
+        )
+
         items, errors = await _search_all_sources(http_client, config, params)
 
         if not items:

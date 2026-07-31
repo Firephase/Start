@@ -22,6 +22,8 @@ class Config:
     resend_from_email: str
     database_url: str
     stackexchange_key: Optional[str]
+    mastodon_instance: str
+    mastodon_access_token: Optional[str]
 
     @classmethod
     def load(cls) -> "Config":
@@ -40,4 +42,6 @@ class Config:
                 "DATABASE_URL", "sqlite+aiosqlite:///./data/bot.db"
             ),
             stackexchange_key=os.getenv("STACKEXCHANGE_KEY") or None,
+            mastodon_instance=os.getenv("MASTODON_INSTANCE", "https://mastodon.social"),
+            mastodon_access_token=os.getenv("MASTODON_ACCESS_TOKEN") or None,
         )
