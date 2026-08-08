@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Neo vs Anakin — The Matrix Awakens the Force</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="game-wrap">
+    <canvas id="bg-canvas" width="960" height="540"></canvas>
+    <canvas id="fx-canvas" width="960" height="540"></canvas>
+
+    <div id="hud">
+      <div class="bar-block left">
+        <div class="fighter-name">NEO</div>
+        <div class="health-outer"><div id="hp-neo" class="health-fill neo-fill"></div></div>
+        <div class="special-outer"><div id="sp-neo" class="special-fill neo-special"></div></div>
+      </div>
+      <div class="center-block">
+        <div id="round-indicators">
+          <span class="round-pip" data-p="neo" data-i="0"></span>
+          <span class="round-pip" data-p="neo" data-i="1"></span>
+          <span id="timer">60</span>
+          <span class="round-pip" data-p="anakin" data-i="1"></span>
+          <span class="round-pip" data-p="anakin" data-i="0"></span>
+        </div>
+      </div>
+      <div class="bar-block right">
+        <div class="fighter-name">ANAKIN</div>
+        <div class="health-outer"><div id="hp-anakin" class="health-fill anakin-fill"></div></div>
+        <div class="special-outer"><div id="sp-anakin" class="special-fill anakin-special"></div></div>
+      </div>
+    </div>
+
+    <div id="overlay" class="screen">
+      <h1 class="title">NEO <span class="vs">VS</span> ANAKIN</h1>
+      <p class="subtitle">The Matrix Awakens the Force</p>
+
+      <div id="menu-main" class="menu">
+        <button id="btn-1p" class="btn">1 Player — vs AI Anakin</button>
+        <button id="btn-2p" class="btn">2 Players — Local Versus</button>
+        <button id="btn-howto" class="btn secondary">How To Play</button>
+      </div>
+
+      <div id="menu-howto" class="menu hidden">
+        <div class="howto-grid">
+          <div class="howto-col">
+            <h3>Neo — Player 1</h3>
+            <ul>
+              <li><b>A / D</b> — Move</li>
+              <li><b>W</b> — Jump</li>
+              <li><b>S</b> — Block (hold)</li>
+              <li><b>J</b> — Punch</li>
+              <li><b>K</b> — Kick</li>
+              <li><b>L</b> — Bullet Time (special)</li>
+            </ul>
+          </div>
+          <div class="howto-col">
+            <h3>Anakin — Player 2</h3>
+            <ul>
+              <li><b>← / →</b> — Move</li>
+              <li><b>↑</b> — Jump</li>
+              <li><b>↓</b> — Block (hold)</li>
+              <li><b>1</b> — Saber Slash</li>
+              <li><b>2</b> — Force Push</li>
+              <li><b>3</b> — Force Lightning (special)</li>
+            </ul>
+          </div>
+        </div>
+        <p class="howto-note">Specials need a full meter. Blocking cuts damage but not to zero. Best of 3 rounds wins the match.</p>
+        <button id="btn-back" class="btn secondary">Back</button>
+      </div>
+
+      <div id="menu-result" class="menu hidden">
+        <h2 id="result-title"></h2>
+        <button id="btn-rematch" class="btn">Rematch</button>
+        <button id="btn-menu" class="btn secondary">Main Menu</button>
+      </div>
+    </div>
+
+    <div id="round-banner"></div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
