@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Citrus Studio — DAW в браузере</title>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============ ВЕРХНЯЯ ПАНЕЛЬ ============ -->
+  <header id="toolbar">
+    <div class="tb-group brand">
+      <div class="logo">🍊</div>
+      <div class="brand-text">
+        <div class="brand-name">CITRUS STUDIO</div>
+        <div class="brand-sub">pattern-based DAW</div>
+      </div>
+    </div>
+
+    <div class="tb-group transport">
+      <button id="btn-play" class="tb-btn play" title="Играть / Пауза (Пробел)">▶</button>
+      <button id="btn-stop" class="tb-btn stop" title="Стоп">■</button>
+      <button id="btn-rec" class="tb-btn rec" title="Запись с клавиатуры в паттерн">●</button>
+      <div class="mode-switch">
+        <button id="mode-pat" class="mode-btn active" title="Режим паттерна (L)">PAT</button>
+        <button id="mode-song" class="mode-btn" title="Режим песни (L)">SONG</button>
+      </div>
+    </div>
+
+    <div class="tb-group readout">
+      <div class="lcd" id="lcd-time" title="Такт : доля : шаг">001:1:01</div>
+      <div class="tempo" id="tempo-field" title="Темп — тяни мышью или колесо, двойной клик — ввод">
+        <div class="tempo-value" id="tempo-value">128.0</div>
+        <div class="tempo-label">BPM</div>
+      </div>
+    </div>
+
+    <div class="tb-group knobs" id="master-knobs"></div>
+
+    <div class="tb-group meters">
+      <canvas id="master-meter" width="120" height="26"></canvas>
+    </div>
+
+    <div class="tb-group pattern-picker">
+      <label class="tb-label">Паттерн</label>
+      <select id="pattern-select" class="tb-select"></select>
+      <button id="btn-pat-add" class="tb-mini" title="Новый паттерн">+</button>
+      <button id="btn-pat-clone" class="tb-mini" title="Клонировать паттерн">⧉</button>
+      <button id="btn-pat-rename" class="tb-mini" title="Переименовать паттерн">✎</button>
+      <button id="btn-pat-del" class="tb-mini danger" title="Удалить паттерн">✕</button>
+    </div>
+
+    <div class="tb-group files">
+      <button id="btn-new" class="tb-btn wide" title="Новый проект">Новый</button>
+      <button id="btn-save" class="tb-btn wide" title="Сохранить проект (.citrus)">Сохранить</button>
+      <button id="btn-load" class="tb-btn wide" title="Загрузить проект">Открыть</button>
+      <button id="btn-export" class="tb-btn wide accent" title="Экспорт в WAV">WAV</button>
+      <input type="file" id="file-project" accept=".citrus,.json" hidden />
+    </div>
+  </header>
+
+  <!-- ============ РАБОЧАЯ ОБЛАСТЬ ============ -->
+  <div id="body">
+
+    <!-- Браузер (как в FL слева) -->
+    <aside id="browser">
+      <div class="panel-title">Браузер</div>
+
+      <div class="browser-section">
+        <div class="browser-head">Ударные</div>
+        <div class="browser-list" id="browser-drums"></div>
+      </div>
+
+      <div class="browser-section">
+        <div class="browser-head">Инструменты</div>
+        <div class="browser-list" id="browser-synths"></div>
+      </div>
+
+      <div class="browser-section">
+        <div class="browser-head">Сэмплер</div>
+        <div class="browser-list">
+          <label class="browser-item sampler-load">
+            <span class="bi-dot" style="background:#8ad7ff"></span>
+            <span>Загрузить сэмпл…</span>
+            <input type="file" id="file-sample" accept="audio/*" hidden />
+          </label>
+        </div>
+      </div>
+
+      <div class="browser-section grow">
+        <div class="browser-head">Паттерны</div>
+        <div class="browser-list" id="browser-patterns"></div>
+      </div>
+    </aside>
+
+    <!-- Основные окна -->
+    <main id="workspace">
+      <nav id="tabs">
+        <button class="tab" data-view="playlist">Плейлист <span class="fkey">F5</span></button>
+        <button class="tab active" data-view="rack">Channel Rack <span class="fkey">F6</span></button>
+        <button class="tab" data-view="piano">Piano Roll <span class="fkey">F7</span></button>
+        <button class="tab" data-view="mixer">Микшер <span class="fkey">F9</span></button>
+      </nav>
+
+      <!-- ---- Плейлист ---- -->
+      <section class="view" id="view-playlist">
+        <div class="view-bar">
+          <span class="vb-label">Кисть:</span>
+          <select id="pl-brush" class="tb-select"></select>
+          <span class="vb-sep"></span>
+          <button class="tb-mini" id="pl-zoom-out" title="Уменьшить">−</button>
+          <button class="tb-mini" id="pl-zoom-in" title="Увеличить">+</button>
+          <span class="vb-sep"></span>
+          <label class="vb-check"><input type="checkbox" id="pl-loop" checked /> Зациклить песню</label>
+          <span class="vb-sep"></span>
+          <button class="tb-mini" id="pl-add-track">+ трек</button>
+          <button class="tb-mini danger" id="pl-clear">Очистить</button>
+          <span class="vb-hint">ЛКМ — поставить клип · ПКМ — удалить · тянуть — двигать</span>
+        </div>
+        <div class="canvas-host"><canvas id="pl-canvas"></canvas></div>
+      </section>
+
+      <!-- ---- Channel Rack ---- -->
+      <section class="view active" id="view-rack">
+        <div class="view-bar">
+          <button class="tb-mini accent" id="rack-add">+ Канал</button>
+          <span class="vb-sep"></span>
+          <span class="vb-label">Длина паттерна:</span>
+          <select id="rack-length" class="tb-select">
+            <option value="8">8 шагов</option>
+            <option value="16" selected>16 шагов</option>
+            <option value="32">32 шага</option>
+            <option value="64">64 шага</option>
+          </select>
+          <span class="vb-sep"></span>
+          <span class="vb-hint">ЛКМ — шаг · ПКМ — стереть · имя канала — настройки · 🎹 — Piano Roll</span>
+        </div>
+        <div id="rack-scroll"><div id="rack-list"></div></div>
+      </section>
+
+      <!-- ---- Piano Roll ---- -->
+      <section class="view" id="view-piano">
+        <div class="view-bar">
+          <span class="vb-label">Канал:</span>
+          <select id="pr-channel" class="tb-select"></select>
+          <span class="vb-sep"></span>
+          <span class="vb-label">Сетка:</span>
+          <select id="pr-snap" class="tb-select">
+            <option value="4">1/4 (доля)</option>
+            <option value="1" selected>1/16 (шаг)</option>
+            <option value="0.5">1/32</option>
+            <option value="0.3333333">триоль</option>
+            <option value="0">без сетки</option>
+          </select>
+          <span class="vb-sep"></span>
+          <button class="tb-mini" id="pr-zoom-out">−</button>
+          <button class="tb-mini" id="pr-zoom-in">+</button>
+          <span class="vb-sep"></span>
+          <button class="tb-mini" id="pr-quantize">Квантование</button>
+          <button class="tb-mini danger" id="pr-clear">Очистить</button>
+          <span class="vb-hint">ЛКМ — нота · ПКМ — удалить · тянуть край — длина · колесо — скролл</span>
+        </div>
+        <div class="canvas-host"><canvas id="pr-canvas"></canvas></div>
+      </section>
+
+      <!-- ---- Микшер ---- -->
+      <section class="view" id="view-mixer">
+        <div class="view-bar">
+          <span class="vb-label">Инсерт:</span>
+          <span class="vb-hint" id="mixer-hint">Выбери инсерт, чтобы настроить эффекты справа</span>
+        </div>
+        <div id="mixer-strips"></div>
+      </section>
+    </main>
+
+    <!-- Инспектор: окно плагина / эффектов -->
+    <aside id="inspector">
+      <div class="panel-title" id="inspector-title">Настройки канала</div>
+      <div id="inspector-body"></div>
+    </aside>
+  </div>
+
+  <!-- ============ СТАТУС ============ -->
+  <footer id="statusbar">
+    <span id="status-text">Готов. Нажми ▶ или Пробел.</span>
+    <span class="status-right">
+      <label class="vb-check"><input type="checkbox" id="chk-typing" checked /> 🎹 набор с клавиатуры ([ ] — октава)</label>
+      <span id="status-cpu">—</span>
+    </span>
+  </footer>
+</div>
+
+<!-- Модальное окно экспорта -->
+<div id="modal" class="hidden">
+  <div class="modal-box">
+    <div class="modal-title" id="modal-title">Экспорт</div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-actions" id="modal-actions"></div>
+  </div>
+</div>
+
+<script src="js/util.js"></script>
+<script src="js/audio/effects.js"></script>
+<script src="js/audio/instruments.js"></script>
+<script src="js/project.js"></script>
+<script src="js/audio/engine.js"></script>
+<script src="js/audio/export.js"></script>
+<script src="js/ui/inspector.js"></script>
+<script src="js/ui/channelrack.js"></script>
+<script src="js/ui/pianoroll.js"></script>
+<script src="js/ui/playlist.js"></script>
+<script src="js/ui/mixer.js"></script>
+<script src="js/ui/browser.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
