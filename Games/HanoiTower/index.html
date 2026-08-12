@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ханойская башня</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="head">
+      <h1 class="title">Ханойская башня</h1>
+      <p class="tagline">Перенесите всю пирамиду на стержень <b>C</b>. Класть больший диск на меньший нельзя.</p>
+    </header>
+
+    <section class="panel">
+      <div class="control">
+        <span class="control-label">Количество дисков</span>
+        <div class="disk-picker" id="disk-picker"></div>
+      </div>
+
+      <div class="control">
+        <span class="control-label">Скорость авто-решения</span>
+        <div class="speed-row">
+          <input type="range" id="speed" min="1" max="8" step="1" value="3" />
+          <span class="speed-value" id="speed-value">×3</span>
+        </div>
+      </div>
+
+      <div class="control buttons">
+        <button class="btn" id="btn-new" title="N">↻ Заново</button>
+        <button class="btn" id="btn-undo" title="U">↶ Отменить</button>
+        <button class="btn" id="btn-hint" title="H">💡 Подсказка</button>
+        <button class="btn primary" id="btn-auto" title="Пробел">▶ Авто-решение</button>
+        <button class="btn icon" id="btn-sound" title="Звук вкл/выкл">🔊</button>
+      </div>
+    </section>
+
+    <section class="stats">
+      <div class="stat">
+        <span class="stat-value" id="stat-moves">0</span>
+        <span class="stat-label">Ходов сделано</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-min">7</span>
+        <span class="stat-label">Минимум (2<sup>n</sup>−1)</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-left">7</span>
+        <span class="stat-label">Осталось минимум</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-time">0:00</span>
+        <span class="stat-label">Время</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="stat-best">—</span>
+        <span class="stat-label">Рекорд</span>
+      </div>
+    </section>
+
+    <div class="progress">
+      <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+      <span class="progress-badge" id="optimal-badge">оптимальный путь</span>
+    </div>
+
+    <main class="board" id="board">
+      <div class="tower" data-peg="0">
+        <div class="stack" data-peg="0"></div>
+        <div class="peg"></div>
+        <div class="base"></div>
+        <div class="tower-label">A <span class="tag">старт</span></div>
+      </div>
+      <div class="tower" data-peg="1">
+        <div class="stack" data-peg="1"></div>
+        <div class="peg"></div>
+        <div class="base"></div>
+        <div class="tower-label">B</div>
+      </div>
+      <div class="tower target" data-peg="2">
+        <div class="stack" data-peg="2"></div>
+        <div class="peg"></div>
+        <div class="base"></div>
+        <div class="tower-label">C <span class="tag">цель</span></div>
+      </div>
+    </main>
+
+    <p class="message" id="message">Перетащите верхний диск на другой стержень — или кликните по стержням.</p>
+
+    <footer class="foot">
+      <span><b>Мышь:</b> перетащить диск или кликнуть по стержню</span>
+      <span><b>1 2 3</b> — выбрать стержень</span>
+      <span><b>U</b> — отменить</span>
+      <span><b>H</b> — подсказка</span>
+      <span><b>N</b> — заново</span>
+      <span><b>Пробел</b> — авто-решение</span>
+    </footer>
+  </div>
+
+  <div class="win-overlay" id="win-overlay" hidden>
+    <canvas class="confetti" id="confetti"></canvas>
+    <div class="win-card">
+      <div class="win-crown" id="win-crown">🏆</div>
+      <h2 class="win-title" id="win-title">Башня собрана!</h2>
+      <p class="win-sub" id="win-sub"></p>
+      <div class="win-stats">
+        <div><span id="win-moves">0</span><small>ходов</small></div>
+        <div><span id="win-min">0</span><small>минимум</small></div>
+        <div><span id="win-time">0:00</span><small>время</small></div>
+      </div>
+      <div class="win-stars" id="win-stars"></div>
+      <p class="win-record" id="win-record" hidden>🎉 Новый рекорд!</p>
+      <div class="win-buttons">
+        <button class="btn primary" id="btn-again">Ещё раз</button>
+        <button class="btn" id="btn-harder">Сложнее (+1 диск)</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
