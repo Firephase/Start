@@ -1,0 +1,644 @@
+<title>Ausnichtsman's polygon</title>
+<style>
+  * { box-sizing: border-box; }
+
+  :root {
+    --sand: #c3a179;
+    --ink: #f4ead9;
+    --dim: rgba(244, 234, 217, 0.62);
+    --deep: rgba(26, 18, 12, 0.66);
+    --edge: rgba(244, 234, 217, 0.2);
+    --rust: #c2542a;
+    --cyan: #2fd6c8;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #d9c6a8;
+    color: var(--ink);
+    font-family: ui-sans-serif, "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #app { position: fixed; inset: 0; }
+  canvas#gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+  .hud { position: absolute; inset: 0; pointer-events: none; }
+  .hud > * { pointer-events: auto; }
+  /* декоративное — не должно перехватывать клик по фигуре под прицелом */
+  .reticle, .prompt, .keys { pointer-events: none; }
+
+  .label { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
+
+  /* ---------- plaque ---------- */
+
+  .plaque {
+    position: absolute;
+    top: 14px; left: 14px;
+    padding: 10px 14px 9px;
+    background: var(--deep);
+    border: 1px solid var(--edge);
+    border-left: 2px solid var(--rust);
+    backdrop-filter: blur(7px);
+  }
+  .plaque h1 { margin: 0; font-size: 13px; letter-spacing: 0.26em; text-transform: uppercase; font-weight: 600; }
+  .plaque hr { border: 0; border-top: 1px solid var(--edge); margin: 7px 0 6px; }
+  .plaque p { margin: 0; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+
+
+  /* ---------- испытания на полигоне ---------- */
+
+  .bomb-btn {
+    position: absolute;
+    right: 14px; bottom: 92px;
+    display: none;
+    padding: 11px 16px;
+    font: inherit; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink);
+    background: rgba(120, 28, 14, 0.82);
+    border: 1px solid rgba(255, 168, 92, 0.55);
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .bomb-btn.show { display: block; }
+  .bomb-btn:disabled { opacity: 0.42; cursor: default; }
+
+  /* тепловая вспышка бьёт по глазам раньше, чем доходит звук */
+  .flash {
+    position: absolute; inset: 0;
+    background: #fff;
+    opacity: 0;
+    pointer-events: none;
+    will-change: opacity;
+  }
+
+
+  /* ---------- Гамма: машина и советник ---------- */
+
+  /* педали и руль: жать можно пальцем и держать */
+  .pedals { gap: 6px; }
+  .pedal { min-width: 58px; padding: 12px 10px; touch-action: none; user-select: none; }
+  .pedal.held { background: rgba(194, 84, 42, 0.55); border-color: rgba(255, 168, 92, 0.7); }
+
+
+  .car-panel { display: none; }
+  .car-panel.show { display: block; }
+
+  .sith-say {
+    position: absolute;
+    left: 50%; top: 96px;
+    transform: translateX(-50%);
+    max-width: min(560px, calc(100vw - 32px));
+    padding: 10px 16px;
+    background: rgba(14, 8, 14, 0.86);
+    border: 1px solid rgba(196, 62, 48, 0.55);
+    border-left: 3px solid #c43e30;
+    border-radius: 3px;
+    font-size: 12.5px; line-height: 1.45;
+    color: #f0e2dc;
+    opacity: 0; transition: opacity 0.25s;
+    pointer-events: none;
+  }
+  .sith-say.show { opacity: 1; }
+  .sith-say::before {
+    content: 'Советник';
+    display: block;
+    font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: rgba(226, 122, 104, 0.9);
+    margin-bottom: 4px;
+  }
+
+  .talk {
+    position: absolute;
+    left: 50%; bottom: 22px;
+    transform: translateX(-50%);
+    width: min(560px, calc(100vw - 28px));
+    display: none;
+    background: rgba(14, 8, 14, 0.9);
+    border: 1px solid rgba(196, 62, 48, 0.5);
+    border-radius: 3px;
+    padding: 9px 10px;
+  }
+  .talk.show { display: flex; gap: 8px; }
+  /* пока говорим, джойстик под окном не нужен и только мешает */
+  .talking .stick { display: none !important; }
+  .talk input {
+    flex: 1; min-width: 0;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid var(--edge);
+    border-radius: 2px;
+    color: var(--ink);
+    font: inherit; font-size: 13px;
+    padding: 7px 9px;
+  }
+  .talk input:focus { outline: none; border-color: rgba(196, 62, 48, 0.8); }
+
+  /* ---------- top right ---------- */
+
+  .tools { position: absolute; top: 14px; right: 14px; display: flex; gap: 6px; }
+
+  button {
+    font: inherit;
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink);
+    background: var(--deep);
+    border: 1px solid var(--edge);
+    padding: 9px 13px;
+    cursor: pointer;
+    backdrop-filter: blur(7px);
+    transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+  }
+  button:hover:not(:disabled) { background: rgba(52, 36, 24, 0.82); border-color: rgba(244, 234, 217, 0.45); }
+  button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  button:disabled { opacity: 0.32; cursor: default; }
+  button.primary { background: var(--rust); border-color: rgba(255, 190, 150, 0.5); color: #fff5ec; }
+  button.primary:hover:not(:disabled) { background: #d75f31; }
+  button.on { border-color: var(--cyan); color: var(--cyan); }
+  button.ghost { background: transparent; border-color: transparent; color: var(--dim); padding: 9px 6px; }
+  button.ghost:hover { color: var(--ink); background: transparent; border-color: transparent; }
+  button.icon { padding: 9px 11px; letter-spacing: 0; font-size: 12px; }
+
+  /* ---------- bottom panel ---------- */
+
+  .panel {
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    transform: translate(-50%, 12px);
+    width: min(560px, calc(100vw - 28px));
+    padding: 12px 14px 13px;
+    background: var(--deep);
+    border: 1px solid var(--edge);
+    backdrop-filter: blur(9px);
+    display: none;
+    opacity: 0;
+    transition: opacity 0.22s ease, transform 0.22s ease;
+  }
+  .panel.show { display: block; opacity: 1; transform: translate(-50%, 0); }
+
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .panel-head .name { font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; }
+
+  .steps { display: flex; gap: 0; margin: 11px 0 12px; border-top: 1px solid var(--edge); border-bottom: 1px solid var(--edge); }
+  .step {
+    flex: 1;
+    padding: 7px 4px;
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(244, 234, 217, 0.4);
+    text-align: center;
+    border-right: 1px solid var(--edge);
+    transition: color 0.2s, background 0.2s;
+  }
+  .step:last-child { border-right: 0; }
+  .step.active { color: var(--ink); background: rgba(194, 84, 42, 0.22); }
+  .step.done { color: var(--cyan); }
+
+  .row { display: flex; align-items: center; gap: 10px; }
+  .row.hide { display: none; }
+
+  .meter { flex: 1; height: 3px; background: rgba(244, 234, 217, 0.16); position: relative; }
+  .meter i { position: absolute; inset: 0 auto 0 0; width: 0%; background: var(--cyan); transition: width 0.1s linear; }
+
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    flex: 1; height: 3px; background: rgba(244, 234, 217, 0.16); outline: none; cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 13px; height: 20px; background: var(--ink);
+    border: 1px solid rgba(0,0,0,0.35); cursor: grab;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 13px; height: 20px; border-radius: 0; background: var(--ink); border: 1px solid rgba(0,0,0,0.35); cursor: grab;
+  }
+
+  .hint { margin: 11px 0 0; font-size: 11px; line-height: 1.45; color: var(--dim); letter-spacing: 0.02em; }
+
+  /* ---------- walk hud ---------- */
+
+  .reticle {
+    position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px;
+    border-radius: 50%; background: rgba(244, 234, 217, 0.55); box-shadow: 0 0 0 1px rgba(30, 20, 12, 0.4);
+    transition: transform 0.18s, background 0.18s;
+  }
+  .reticle.hot { transform: scale(2.1); background: var(--cyan); }
+
+  .prompt {
+    position: absolute; left: 50%; top: calc(50% + 26px); transform: translateX(-50%);
+    font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase;
+    padding: 6px 11px; background: var(--deep); border: 1px solid var(--edge);
+    opacity: 0; transition: opacity 0.18s; white-space: nowrap;
+  }
+  .prompt.show { opacity: 1; }
+
+  .clocks {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    padding: 9px 13px; background: var(--deep); border: 1px solid var(--edge);
+    border-top: 2px solid var(--cyan); backdrop-filter: blur(7px);
+    min-width: 210px; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+  }
+  .clocks.show { opacity: 1; }
+  .clock-row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+  .clock-row b { font-size: 15px; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .clock-row:last-of-type b { color: var(--cyan); }
+  .clock-rate {
+    margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--edge);
+    font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim);
+  }
+  .clock-rate span { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  .toast {
+    position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%);
+    padding: 8px 14px; background: var(--deep); border: 1px solid var(--edge);
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    opacity: 0; transition: opacity 0.35s; pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+
+  .stick {
+    position: absolute; left: 20px; bottom: 20px; width: 112px; height: 112px; border-radius: 50%;
+    border: 1px solid var(--edge); background: rgba(26, 18, 12, 0.38); display: none; touch-action: none;
+  }
+  .stick.show { display: block; }
+  .stick i { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px;
+    border-radius: 50%; background: rgba(244, 234, 217, 0.5); border: 1px solid rgba(30,20,12,0.35); }
+
+  .keys { position: absolute; left: 16px; bottom: 16px; font-size: 10px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: rgba(244, 234, 217, 0.45); }
+  .keys.hide { display: none; }
+
+  /* ---------- overlays ---------- */
+
+  .cover {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(120% 90% at 50% 30%, rgba(24, 16, 10, 0.55), rgba(18, 12, 8, 0.86));
+    backdrop-filter: blur(3px); padding: 18px;
+  }
+  .cover.gone { display: none; }
+  .card {
+    width: min(430px, 100%); padding: 22px 22px 18px;
+    background: var(--deep); border: 1px solid var(--edge); border-top: 2px solid var(--rust);
+  }
+  .card h2 { margin: 0 0 3px; font-size: 17px; letter-spacing: 0.24em; text-transform: uppercase; font-weight: 600; }
+  .card .sub { font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
+  .card ul { margin: 16px 0 18px; padding: 0; list-style: none; display: grid; gap: 7px; }
+  .card li { font-size: 12px; line-height: 1.4; color: rgba(244, 234, 217, 0.86); display: flex; gap: 10px; }
+  .card li b {
+    flex: 0 0 92px; font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--dim); font-weight: 500; padding-top: 2px;
+  }
+  .card .actions { display: flex; gap: 8px; }
+
+  .help { position: absolute; top: 58px; right: 14px; width: min(320px, calc(100vw - 28px));
+    padding: 14px; background: var(--deep); border: 1px solid var(--edge); backdrop-filter: blur(9px); display: none; }
+  .help.show { display: block; }
+  .help ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .help li { font-size: 11.5px; line-height: 1.4; display: flex; gap: 9px; color: rgba(244, 234, 217, 0.86); }
+  .help li b { flex: 0 0 86px; font-size: 9.5px; letter-spacing: 0.13em; text-transform: uppercase; color: var(--dim); font-weight: 500; padding-top: 2px; }
+
+  .tent-panel { width: min(360px, calc(100vw - 28px)); }
+  .tent-panel .hint { margin: 9px 0 11px; }
+
+  /* ---------- дневничок ---------- */
+
+  .diary {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    background: radial-gradient(120% 100% at 50% 40%, rgba(20, 13, 8, 0.55), rgba(12, 8, 5, 0.86));
+    padding: 16px; z-index: 40;
+  }
+  .diary.show { display: flex; }
+
+  .book {
+    position: relative;
+    display: grid; grid-template-columns: 1fr 1fr;
+    width: min(880px, 100%); height: min(560px, calc(100vh - 40px));
+    background: linear-gradient(180deg, #4a2f22, #35211a);
+    padding: 14px;
+    border-radius: 6px;
+    box-shadow: 0 34px 90px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(255, 220, 170, 0.14);
+  }
+  .book::after {
+    content: ''; position: absolute; inset: 6px; border-radius: 4px;
+    border: 1px solid rgba(255, 214, 160, 0.16); pointer-events: none;
+  }
+  .book-spine {
+    position: absolute; left: 50%; top: 8px; bottom: 8px; width: 26px; transform: translateX(-50%);
+    background: linear-gradient(90deg, rgba(0,0,0,0.42), rgba(0,0,0,0.06) 35%, rgba(0,0,0,0.06) 65%, rgba(0,0,0,0.42));
+    z-index: 2; pointer-events: none;
+  }
+  .book-spine::before {
+    content: ''; position: absolute; left: 50%; top: 6%; bottom: 6%; width: 2px; transform: translateX(-50%);
+    background: repeating-linear-gradient(180deg, rgba(255,225,180,0.5) 0 7px, transparent 7px 16px);
+  }
+
+  .page {
+    position: relative;
+    background:
+      repeating-linear-gradient(180deg, transparent 0 25px, rgba(90, 120, 150, 0.20) 25px 26px),
+      linear-gradient(180deg, #f6ecd8, #efe2c9);
+    background-position: 0 34px, 0 0;
+    padding: 16px 18px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .page-left { border-radius: 3px 0 0 3px; box-shadow: inset -14px 0 22px rgba(90, 60, 30, 0.16); }
+  .page-right { border-radius: 0 3px 3px 0; box-shadow: inset 14px 0 22px rgba(90, 60, 30, 0.16); }
+  .page-right::before {
+    content: ''; position: absolute; left: 46px; top: 0; bottom: 0; width: 1px; background: rgba(190, 80, 70, 0.45);
+  }
+
+  .page-head {
+    font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: #9a7c55; margin-bottom: 10px; display: flex; justify-content: space-between; gap: 8px;
+  }
+
+  .entries { flex: 1; overflow-y: auto; padding-right: 4px; }
+  .diary-entry { margin-bottom: 14px; }
+  .diary-when {
+    display: block; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: #a8895f; margin-bottom: 1px;
+  }
+  .diary-text {
+    display: block; font-family: 'Segoe Script', 'Bradley Hand', 'Apple Chancery', cursive, Georgia, serif;
+    font-size: 17px; line-height: 26px; color: #26385e; white-space: pre-wrap; word-break: break-word;
+  }
+  .diary-empty {
+    font-family: 'Segoe Script', 'Bradley Hand', 'Apple Chancery', cursive, Georgia, serif;
+    font-size: 16px; line-height: 26px; color: rgba(38, 56, 94, 0.45); margin: 0;
+  }
+
+  #diary-input {
+    flex: 1; width: 100%; resize: none; border: 0; outline: none; background: transparent;
+    padding: 0 0 0 56px; margin: 0;   /* пишем справа от красного поля */
+    font-family: 'Segoe Script', 'Bradley Hand', 'Apple Chancery', cursive, Georgia, serif;
+    font-size: 18px; line-height: 26px; color: #22345c;
+  }
+  #diary-input::placeholder { color: rgba(34, 52, 92, 0.32); }
+
+  .pen {
+    position: absolute; right: 10px; bottom: 62px; width: 210px; height: 38px;
+    filter: drop-shadow(0 6px 10px rgba(60, 40, 20, 0.35));
+    transform: rotate(-11deg); transform-origin: 20% 50%;
+    transition: transform 0.25s ease;
+    pointer-events: none;
+  }
+  .pen.writing { transform: rotate(-15deg) translate(-8px, -4px); }
+
+  .book-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .book-actions button {
+    background: rgba(60, 40, 26, 0.10); border: 1px solid rgba(90, 62, 36, 0.35); color: #4a3320;
+    backdrop-filter: none;
+  }
+  .book-actions button:hover:not(:disabled) { background: rgba(90, 62, 36, 0.18); border-color: rgba(90, 62, 36, 0.6); }
+  .book-actions button.primary { background: #8d4a24; border-color: #b3703f; color: #fdf0dd; }
+  .book-actions button.primary:hover { background: #a2562a; }
+  .book-hint { font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #a8895f; margin-top: 6px; }
+
+  @media (max-width: 700px) {
+    .book { grid-template-columns: 1fr; height: min(620px, calc(100vh - 32px)); }
+    .book-spine, .page-left { display: none; }
+    .page-right { border-radius: 3px; }
+    .pen { display: none; }
+  }
+
+  .fail { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; padding: 20px;
+    background: #1a120c; color: var(--ink); text-align: center; font-size: 13px; line-height: 1.5; }
+  .fail.show { display: flex; }
+
+  @media (max-width: 520px) {
+    .plaque { padding: 8px 11px 7px; }
+    .plaque h1 { font-size: 11px; letter-spacing: 0.2em; }
+    .plaque p { display: none; }
+    .plaque hr { display: none; }
+    .panel { bottom: 12px; padding: 10px 11px 11px; }
+    .hint { font-size: 10.5px; }
+    .clocks {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    padding: 9px 13px; background: var(--deep); border: 1px solid var(--edge);
+    border-top: 2px solid var(--cyan); backdrop-filter: blur(7px);
+    min-width: 210px; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+  }
+  .clocks.show { opacity: 1; }
+  .clock-row { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+  .clock-row b { font-size: 15px; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .clock-row:last-of-type b { color: var(--cyan); }
+  .clock-rate {
+    margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--edge);
+    font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim);
+  }
+  .clock-rate span { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  .toast {
+    position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%);
+    padding: 8px 14px; background: var(--deep); border: 1px solid var(--edge);
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+    opacity: 0; transition: opacity 0.35s; pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+
+  .stick { left: 14px; bottom: 14px; }
+    .bomb-btn { right: 12px; bottom: 150px; padding: 9px 12px; font-size: 11px; }
+    /* за рулём панель занимает низ экрана — поднимаем кнопку над ней */
+    .driving .bomb-btn { bottom: 268px; }
+  }
+</style>
+
+<div id="app">
+  <canvas id="gl"></canvas>
+
+  <div class="hud">
+    <div class="plaque">
+      <h1>Ausnichtsman&rsquo;s polygon</h1>
+      <hr />
+      <p id="plaque-sub">Невада · три поверхности</p>
+    </div>
+
+    <div class="tools">
+      <button class="icon" id="btn-sound" title="Ветер">♪</button>
+      <button class="icon" id="btn-help" title="Управление">?</button>
+    </div>
+
+    <div class="help" id="help">
+      <ul>
+        <li><b>Идти</b> W A S D или джойстик слева</li>
+        <li><b>Осмотреться</b> тянуть по экрану</li>
+        <li><b>Взять</b> нажать на фигуру</li>
+        <li><b>Вращать</b> тянуть по фигуре</li>
+        <li><b>Масштаб</b> колесо или щипок</li>
+        <li><b>Вода</b> E — помыть руки</li>
+        <li><b>Палатка</b> E — расположиться, там блокнот</li>
+        <li><b>Ракета</b> E — сесть, затем «Запуск»</li>
+        <li><b>Куда лететь</b> кнопка «цель» в кабине: квазар или Полигон Гамма</li>
+        <li><b>Испытание</b> на Гамме — B или кнопка «Сбросить бомбу»</li>
+        <li><b>Машина</b> подойти и нажать на неё (или E); газ, тормоз и руль — кнопками или W A S D</li>
+        <li><b>Советник</b> T — заговорить, Enter — сказать</li>
+        <li><b>Отпустить</b> Esc</li>
+      </ul>
+    </div>
+
+    <div class="clocks" id="clocks">
+      <div class="clock-row"><span class="label">Ваши часы</span><b id="clock-me">0:00</b></div>
+      <div class="clock-row"><span class="label">Часы вдали</span><b id="clock-far">0:00</b></div>
+      <div class="clock-rate"><span id="clock-rate">×1.00</span> — во столько раз быстрее идёт время вдали</div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <div class="reticle" id="reticle"></div>
+    <div class="prompt" id="prompt">Нажмите, чтобы взять</div>
+
+    <div class="keys" id="keys">W A S D · тянуть — осмотреться</div>
+    <div class="stick" id="stick"><i id="stick-knob"></i></div>
+
+    <div class="panel" id="panel">
+      <div class="panel-head">
+        <span class="name" id="f-name">—</span>
+        <button id="btn-release">Отпустить</button>
+      </div>
+
+      <div class="steps">
+        <span class="step" id="step-1">1 · линия</span>
+        <span class="step" id="step-2">2 · разрез</span>
+        <span class="step" id="step-3">3 · раздвинуть</span>
+      </div>
+
+      <div class="row" id="row-draw">
+        <button id="btn-draw">Провести линию</button>
+        <div class="meter"><i id="draw-meter"></i></div>
+        <button class="ghost" id="btn-autodraw">авто</button>
+      </div>
+
+      <div class="row hide" id="row-cut">
+        <button class="primary" id="btn-cut">Разрезать по линии</button>
+        <button class="ghost" id="btn-reset-1">сброс</button>
+      </div>
+
+      <div class="row hide" id="row-sep">
+        <span class="label">Раздвинуть</span>
+        <input type="range" id="sep" min="0" max="100" value="0" />
+        <button class="ghost" id="btn-reset-2">сброс</button>
+      </div>
+
+      <p class="hint" id="hint">—</p>
+    </div>
+
+    <div class="cover" id="cover">
+      <div class="card">
+        <h2>Ausnichtsman&rsquo;s polygon</h2>
+        <div class="sub">Невада · три поверхности в воздухе</div>
+        <ul>
+          <li><b>Идти</b> W A S D, или джойстик слева на телефоне</li>
+          <li><b>Осмотреться</b> тянуть по экрану</li>
+          <li><b>Фигура</b> нажать — возьмёте её в руки</li>
+          <li><b>Дальше</b> провести линию, разрезать, раздвинуть</li>
+        </ul>
+        <div class="actions">
+          <button class="primary" id="btn-start">Войти в пустыню</button>
+          <button class="ghost" id="btn-start-mute">без звука</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel tent-panel" id="tent-panel">
+      <div class="panel-head">
+        <span class="name">В палатке</span>
+        <button id="tent-leave">Встать</button>
+      </div>
+      <p class="hint">Кот не возражает. Ветер снаружи, музыка внутри.</p>
+      <div class="row"><button class="primary" id="tent-book">Открыть блокнот</button></div>
+    </div>
+
+    <div class="panel tent-panel" id="rocket-panel">
+      <div class="panel-head">
+        <span class="name">Ракета</span>
+        <button id="rocket-exit">Выйти</button>
+      </div>
+      <p class="hint" id="rocket-info">—</p>
+      <div class="row">
+        <button class="primary" id="rocket-launch">Запуск</button>
+        <button id="rocket-dest">цель: квазар</button>
+        <button id="rocket-home">Домой</button>
+        <button id="rocket-warp">время ×1</button>
+        <button id="rocket-stealth">Невидимость</button>
+      </div>
+    </div>
+
+    <button class="bomb-btn" id="bomb-btn">Сбросить бомбу</button>
+
+    <div class="panel tent-panel car-panel" id="car-panel">
+      <div class="panel-head">
+        <span class="name">Машина</span>
+        <button id="car-exit">Выйти</button>
+      </div>
+      <p class="hint" id="car-info">—</p>
+      <div class="row pedals">
+        <button id="car-left" class="pedal">◀</button>
+        <button id="car-gas" class="pedal primary">Газ</button>
+        <button id="car-brake" class="pedal">Тормоз</button>
+        <button id="car-right" class="pedal">▶</button>
+      </div>
+      <div class="row">
+        <button class="primary" id="car-auto">В город</button>
+      </div>
+    </div>
+
+    <div class="sith-say" id="sith-say"></div>
+    <div class="talk" id="talk">
+      <input id="talk-input" type="text" maxlength="160" placeholder="Сказать советнику…" autocomplete="off" />
+      <button id="talk-send">Сказать</button>
+      <button id="talk-close">Закрыть</button>
+    </div>
+    <div class="flash" id="flash"></div>
+
+    <div class="diary" id="diary">
+      <div class="book">
+        <div class="book-spine"></div>
+        <div class="page page-left">
+          <div class="page-head">Записанные мысли</div>
+          <div class="entries" id="diary-entries"></div>
+        </div>
+        <div class="page page-right">
+          <div class="page-head">Новая запись <span id="diary-stamp"></span></div>
+          <textarea id="diary-input" spellcheck="false" placeholder="Что пришло в голову…"></textarea>
+          <svg class="pen" id="diary-pen" viewBox="0 0 220 40" aria-hidden="true">
+            <defs>
+              <linearGradient id="penBody" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#3d2b25" />
+                <stop offset="0.45" stop-color="#7a5040" />
+                <stop offset="1" stop-color="#2b1d18" />
+              </linearGradient>
+              <linearGradient id="penNib" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stop-color="#caa64a" />
+                <stop offset="1" stop-color="#8a6b22" />
+              </linearGradient>
+            </defs>
+            <rect x="52" y="12" width="150" height="15" rx="7" fill="url(#penBody)" />
+            <rect x="150" y="11" width="46" height="17" rx="8" fill="#241914" />
+            <rect x="96" y="12" width="9" height="15" fill="#b9993f" opacity="0.85" />
+            <path d="M52 12 L20 20 L52 27 Z" fill="url(#penNib)" />
+            <path d="M20 20 L38 20" stroke="#5c4718" stroke-width="1.6" />
+            <circle cx="44" cy="19.5" r="2.6" fill="#4a3a12" />
+          </svg>
+          <div class="book-actions">
+            <button class="primary" id="diary-write">Записать</button>
+            <button id="diary-close">Закрыть блокнот</button>
+          </div>
+          <div class="book-hint">Ctrl + Enter — записать</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="fail" id="fail">
+      <div>
+        Не удалось запустить WebGL.<br />
+        Попробуйте другой браузер или включите аппаратное ускорение.
+      </div>
+    </div>
+  </div>
+</div>
