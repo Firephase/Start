@@ -361,6 +361,31 @@ function sithGreet() {
   sithSay('Добро пожаловать на Гамму. Я ваш советник. Спрашивайте — или начинайте испытания.');
 }
 
+/** Достаточно ли близко, чтобы завести разговор. */
+function talkReady() {
+  return game.world === 'gamma' && !CAR.inside && !game.rocket.inside
+    && !game.tent.inside && Math.hypot(cam.x - SITH.x, cam.z - SITH.z) < 26;
+}
+
+/** Открыть разговор нажатием — на планшете это единственный путь. */
+function talkClose() {
+  if (game.world !== 'gamma' || CAR.inside || game.rocket.inside) return false;
+  if (Math.hypot(cam.x - SITH.x, cam.z - SITH.z) > 5.5) return false;
+  if (document.getElementById('talk').classList.contains('show')) return false;
+  openTalk();
+  return true;
+}
+
+let talkBtnShown = false;
+
+/** Кнопка «Поговорить» висит, пока советник рядом. */
+function syncTalkUI() {
+  const btn = document.getElementById('talk-btn');
+  if (!btn) return;
+  const show = talkReady() && !document.getElementById('talk').classList.contains('show');
+  if (show !== talkBtnShown) { talkBtnShown = show; btn.classList.toggle('show', show); }
+}
+
 function openTalk() {
   if (game.world !== 'gamma') return;
   if (Math.hypot(cam.x - SITH.x, cam.z - SITH.z) > 26) { toast('Советник слишком далеко'); return; }

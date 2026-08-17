@@ -95,6 +95,23 @@
   }
   .bubble.show { opacity: 1; }
 
+
+  /* кнопка разговора: без клавиатуры к советнику иначе не подступиться */
+  .talk-btn {
+    position: absolute;
+    right: 14px; bottom: 136px;
+    display: none;
+    padding: 11px 16px;
+    font: inherit; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink);
+    background: rgba(52, 22, 44, 0.86);
+    border: 1px solid rgba(196, 62, 48, 0.6);
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .talk-btn.show { display: block; }
+  .talking .talk-btn { display: none; }
+
   /* приближение вида */
   .zoom {
     position: absolute;
@@ -509,6 +526,8 @@
 
   .stick { left: 14px; bottom: 14px; }
     .bomb-btn { right: 12px; bottom: 150px; padding: 9px 12px; font-size: 11px; }
+    .talk-btn { right: 12px; bottom: 196px; padding: 9px 12px; font-size: 11px; }
+    .driving .talk-btn { bottom: 314px; }
     /* за рулём панель занимает низ экрана — поднимаем кнопку над ней */
     .driving .bomb-btn { bottom: 268px; }
     .talking .bomb-btn { bottom: 210px; }
@@ -545,7 +564,7 @@
         <li><b>Испытание</b> на Гамме — B или кнопка «Сбросить бомбу»</li>
         <li><b>Кофе</b> подойти к стойке в кафе и нажать E</li>
         <li><b>Машина</b> подойти и нажать на неё (или E); газ, тормоз и руль — кнопками или W A S D</li>
-        <li><b>Советник</b> T — заговорить: готовые реплики, микрофон или Enter</li>
+        <li><b>Советник</b> подойти и нажать на него, кнопка «Поговорить» или клавиша T</li>
         <li><b>Спутник</b> скажите «пойдём со мной» — пойдёт следом и сядет в машину</li>
         <li><b>Отпустить</b> Esc</li>
       </ul>
@@ -644,6 +663,7 @@
       <button id="zoom-out" title="Отдалить">−</button>
     </div>
 
+    <button class="talk-btn" id="talk-btn">Поговорить</button>
     <button class="bomb-btn" id="bomb-btn">Сбросить бомбу</button>
 
     <div class="panel tent-panel car-panel" id="car-panel">
@@ -6144,6 +6164,31 @@ function sithGreet() {
   sithSay('Добро пожаловать на Гамму. Я ваш советник. Спрашивайте — или начинайте испытания.');
 }
 
+/** Достаточно ли близко, чтобы завести разговор. */
+function talkReady() {
+  return game.world === 'gamma' && !CAR.inside && !game.rocket.inside
+    && !game.tent.inside && Math.hypot(cam.x - SITH.x, cam.z - SITH.z) < 26;
+}
+
+/** Открыть разговор нажатием — на планшете это единственный путь. */
+function talkClose() {
+  if (game.world !== 'gamma' || CAR.inside || game.rocket.inside) return false;
+  if (Math.hypot(cam.x - SITH.x, cam.z - SITH.z) > 5.5) return false;
+  if (document.getElementById('talk').classList.contains('show')) return false;
+  openTalk();
+  return true;
+}
+
+let talkBtnShown = false;
+
+/** Кнопка «Поговорить» висит, пока советник рядом. */
+function syncTalkUI() {
+  const btn = document.getElementById('talk-btn');
+  if (!btn) return;
+  const show = talkReady() && !document.getElementById('talk').classList.contains('show');
+  if (show !== talkBtnShown) { talkBtnShown = show; btn.classList.toggle('show', show); }
+}
+
 function openTalk() {
   if (game.world !== 'gamma') return;
   if (Math.hypot(cam.x - SITH.x, cam.z - SITH.z) > 26) { toast('Советник слишком далеко'); return; }
@@ -8558,7 +8603,7 @@ canvas.addEventListener('pointerdown', (e) => {
     } else if (game.mode === 'walk') {
       const hit = pick(nx, ny);
       if (hit >= 0) { enterFocus(hit); lookId = null; }
-      else if (buyCoffee() || washHands() || tentSit() || carBoard() || rocketBoard()) lookId = null;
+      else if (buyCoffee() || talkClose() || washHands() || tentSit() || carBoard() || rocketBoard()) lookId = null;
     }
   }
 });
@@ -8665,7 +8710,7 @@ window.addEventListener('keydown', (e) => {
   }
   keys[e.code] = true;
   if (e.code === 'Escape' && game.mode === 'focus') exitFocus();
-  if (e.code === 'KeyE' && game.mode === 'walk') { if (!buyCoffee() && !washHands() && !tentSit() && !carBoard()) rocketBoard(); }
+  if (e.code === 'KeyE' && game.mode === 'walk') { if (!buyCoffee() && !talkClose() && !washHands() && !tentSit() && !carBoard()) rocketBoard(); }
   if (e.code === 'KeyT' && game.world === 'gamma' && !CAR.inside) openTalk();
   if (e.code === 'KeyB') dropBomb();
   if (e.code === 'Escape' && game.tent.inside) tentLeave();
@@ -8737,6 +8782,7 @@ document.getElementById('rocket-dest').addEventListener('click', () => {
   syncRocket();
 });
 document.getElementById('bomb-btn').addEventListener('click', (e) => { e.stopPropagation(); dropBomb(); });
+document.getElementById('talk-btn').addEventListener('click', (e) => { e.stopPropagation(); openTalk(); });
 document.getElementById('zoom-in').addEventListener('click', () => setZoom(game.zoom * 1.45));
 document.getElementById('zoom-out').addEventListener('click', () => setZoom(game.zoom / 1.45));
 document.getElementById('car-exit').addEventListener('click', carExit);
@@ -8981,7 +9027,8 @@ function update(dt) {
   if (sig !== lastSig) { lastSig = sig; syncUI(); }
 
   // часы: показываем, как только расхождение становится заметным
-  const showClocks = game.dilation > 1.015;
+  // часы расхождения нужны только там, где есть дыра
+  const showClocks = game.world === 'earth' && game.dilation > 1.015;
   ui.clocks.classList.toggle('show', showClocks);
   if (showClocks) {
     ui.clockMe.textContent = mmss(game.proper);
@@ -9025,6 +9072,7 @@ function update(dt) {
   }
 
   syncBombUI();
+  syncTalkUI();
   updateBubble();
   if (CAR.inside) { syncCarUI(); carSoundLevel(); }
   fireLevel();
@@ -9040,13 +9088,16 @@ function update(dt) {
     const nearRocket = !game.rocket.inside && Math.hypot(cam.x - PAD.x, cam.z - PAD.z) < 6.5;
     const nearCar = !home && !CAR.inside && Math.hypot(cam.x - CAR.x, cam.z - CAR.z) < 4.5;
     const atBar = nearCafe();
+    const atSith = !home && !CAR.inside && Math.hypot(cam.x - SITH.x, cam.z - SITH.z) < 5.5
+      && !document.getElementById('talk').classList.contains('show');
     if (atBar) ui.prompt.textContent = 'Нажмите или E — взять кофе';
+    else if (atSith) ui.prompt.textContent = 'Нажмите или E — поговорить';
     else if (nearShape) ui.prompt.textContent = 'Нажмите, чтобы взять';
     else if (nearWater) ui.prompt.textContent = 'Нажмите или E — помыть руки';
     else if (nearTent) ui.prompt.textContent = 'Нажмите или E — расположиться';
     else if (nearCar) ui.prompt.textContent = 'Нажмите или E — сесть за руль';
     else if (nearRocket) ui.prompt.textContent = 'Нажмите или E — сесть в ракету';
-    const hot = atBar || nearShape || nearWater || nearTent || nearCar || nearRocket;
+    const hot = atBar || atSith || nearShape || nearWater || nearTent || nearCar || nearRocket;
     ui.reticle.classList.toggle('hot', hot);
     ui.prompt.classList.toggle('show', hot);
   } else {

@@ -95,6 +95,23 @@
   }
   .bubble.show { opacity: 1; }
 
+
+  /* кнопка разговора: без клавиатуры к советнику иначе не подступиться */
+  .talk-btn {
+    position: absolute;
+    right: 14px; bottom: 136px;
+    display: none;
+    padding: 11px 16px;
+    font: inherit; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink);
+    background: rgba(52, 22, 44, 0.86);
+    border: 1px solid rgba(196, 62, 48, 0.6);
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .talk-btn.show { display: block; }
+  .talking .talk-btn { display: none; }
+
   /* приближение вида */
   .zoom {
     position: absolute;
@@ -509,6 +526,8 @@
 
   .stick { left: 14px; bottom: 14px; }
     .bomb-btn { right: 12px; bottom: 150px; padding: 9px 12px; font-size: 11px; }
+    .talk-btn { right: 12px; bottom: 196px; padding: 9px 12px; font-size: 11px; }
+    .driving .talk-btn { bottom: 314px; }
     /* за рулём панель занимает низ экрана — поднимаем кнопку над ней */
     .driving .bomb-btn { bottom: 268px; }
     .talking .bomb-btn { bottom: 210px; }
@@ -545,7 +564,7 @@
         <li><b>Испытание</b> на Гамме — B или кнопка «Сбросить бомбу»</li>
         <li><b>Кофе</b> подойти к стойке в кафе и нажать E</li>
         <li><b>Машина</b> подойти и нажать на неё (или E); газ, тормоз и руль — кнопками или W A S D</li>
-        <li><b>Советник</b> T — заговорить: готовые реплики, микрофон или Enter</li>
+        <li><b>Советник</b> подойти и нажать на него, кнопка «Поговорить» или клавиша T</li>
         <li><b>Спутник</b> скажите «пойдём со мной» — пойдёт следом и сядет в машину</li>
         <li><b>Отпустить</b> Esc</li>
       </ul>
@@ -644,6 +663,7 @@
       <button id="zoom-out" title="Отдалить">−</button>
     </div>
 
+    <button class="talk-btn" id="talk-btn">Поговорить</button>
     <button class="bomb-btn" id="bomb-btn">Сбросить бомбу</button>
 
     <div class="panel tent-panel car-panel" id="car-panel">
