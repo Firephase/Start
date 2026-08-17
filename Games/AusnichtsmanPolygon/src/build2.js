@@ -1,5 +1,5 @@
 const fs = require('fs');
-const parts = ['p2.js','p2b.js','p3.js','p4.js','p4b.js','p7.js','p9.js','p10.js','p11.js','p12.js','p5.js','p8.js','p6.js'].map(f => fs.readFileSync(f,'utf8').trim()).join('\n\n');
+const parts = ['p2.js','p2b.js','p3.js','p4.js','p4b.js','p7.js','p9.js','p10.js','p11.js','p12.js','p13.js','p5.js','p8.js','p6.js'].map(f => fs.readFileSync(f,'utf8').trim()).join('\n\n');
 const html = fs.readFileSync('p1.html','utf8').trim();
 const out = html + '\n\n<script>\n' + parts + '\n<\/script>\n';
 fs.writeFileSync('polygon-mobius.html', out);

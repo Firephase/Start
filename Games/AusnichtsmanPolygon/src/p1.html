@@ -76,6 +76,47 @@
   }
 
 
+
+
+  /* реплика над головой говорящего */
+  .bubble {
+    position: fixed;
+    transform: translate(-50%, -100%);
+    max-width: 240px;
+    padding: 6px 10px;
+    background: rgba(18, 14, 12, 0.86);
+    border: 1px solid var(--edge);
+    border-radius: 12px;
+    font-size: 11.5px; line-height: 1.35;
+    color: var(--ink);
+    opacity: 0; transition: opacity 0.2s;
+    pointer-events: none;
+    white-space: normal;
+  }
+  .bubble.show { opacity: 1; }
+
+  /* приближение вида */
+  .zoom {
+    position: absolute;
+    right: 14px; top: 108px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 6px 5px;
+    background: var(--deep);
+    border: 1px solid var(--edge);
+    border-radius: 3px;
+  }
+  .zoom button {
+    width: 34px; height: 30px;
+    font: inherit; font-size: 16px; line-height: 1;
+    color: var(--ink);
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid var(--edge);
+    border-radius: 2px;
+    cursor: pointer;
+  }
+  .zoom span { font-size: 10px; letter-spacing: 0.1em; color: var(--dim); }
+  .zoom.on span { color: var(--cyan); }
+
   /* ---------- Гамма: машина и советник ---------- */
 
   /* педали и руль: жать можно пальцем и держать */
@@ -122,9 +163,33 @@
     border-radius: 3px;
     padding: 9px 10px;
   }
-  .talk.show { display: flex; gap: 8px; }
+  .talk.show { display: block; }
   /* пока говорим, джойстик под окном не нужен и только мешает */
   .talking .stick { display: none !important; }
+  /* окно разговора занимает низ экрана — кнопку сброса поднимаем над ним */
+  .talking .bomb-btn { bottom: 178px; }
+  .talk-row { display: flex; gap: 8px; }
+  .talk-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .talk-chips:empty { display: none; }
+  .talk-chips button {
+    font: inherit; font-size: 11.5px;
+    padding: 6px 10px;
+    color: var(--ink);
+    background: rgba(196, 62, 48, 0.16);
+    border: 1px solid rgba(196, 62, 48, 0.45);
+    border-radius: 14px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .talk-chips button:hover { background: rgba(196, 62, 48, 0.32); }
+  #talk-mic { min-width: 44px; font-size: 15px; }
+  #talk-mic.listening {
+    background: rgba(196, 62, 48, 0.6);
+    border-color: rgba(255, 168, 92, 0.8);
+    animation: micPulse 1.1s ease-in-out infinite;
+  }
+  #talk-mic.hidden { display: none; }
+  @keyframes micPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
   .talk input {
     flex: 1; min-width: 0;
     background: rgba(0, 0, 0, 0.4);
@@ -446,6 +511,7 @@
     .bomb-btn { right: 12px; bottom: 150px; padding: 9px 12px; font-size: 11px; }
     /* за рулём панель занимает низ экрана — поднимаем кнопку над ней */
     .driving .bomb-btn { bottom: 268px; }
+    .talking .bomb-btn { bottom: 210px; }
   }
 </style>
 
@@ -470,14 +536,17 @@
         <li><b>Осмотреться</b> тянуть по экрану</li>
         <li><b>Взять</b> нажать на фигуру</li>
         <li><b>Вращать</b> тянуть по фигуре</li>
-        <li><b>Масштаб</b> колесо или щипок</li>
+        <li><b>Масштаб фигуры</b> колесо или щипок, когда фигура в руках</li>
+        <li><b>Приблизить вид</b> кнопки + и − справа, колесо или щипок</li>
         <li><b>Вода</b> E — помыть руки</li>
         <li><b>Палатка</b> E — расположиться, там блокнот</li>
         <li><b>Ракета</b> E — сесть, затем «Запуск»</li>
         <li><b>Куда лететь</b> кнопка «цель» в кабине: квазар или Полигон Гамма</li>
         <li><b>Испытание</b> на Гамме — B или кнопка «Сбросить бомбу»</li>
+        <li><b>Кофе</b> подойти к стойке в кафе и нажать E</li>
         <li><b>Машина</b> подойти и нажать на неё (или E); газ, тормоз и руль — кнопками или W A S D</li>
-        <li><b>Советник</b> T — заговорить, Enter — сказать</li>
+        <li><b>Советник</b> T — заговорить: готовые реплики, микрофон или Enter</li>
+        <li><b>Спутник</b> скажите «пойдём со мной» — пойдёт следом и сядет в машину</li>
         <li><b>Отпустить</b> Esc</li>
       </ul>
     </div>
@@ -569,6 +638,12 @@
       </div>
     </div>
 
+    <div class="zoom" id="zoom">
+      <button id="zoom-in" title="Приблизить">+</button>
+      <span id="zoom-label">×1.0</span>
+      <button id="zoom-out" title="Отдалить">−</button>
+    </div>
+
     <button class="bomb-btn" id="bomb-btn">Сбросить бомбу</button>
 
     <div class="panel tent-panel car-panel" id="car-panel">
@@ -588,11 +663,16 @@
       </div>
     </div>
 
+    <div class="bubble" id="bubble"></div>
     <div class="sith-say" id="sith-say"></div>
     <div class="talk" id="talk">
-      <input id="talk-input" type="text" maxlength="160" placeholder="Сказать советнику…" autocomplete="off" />
-      <button id="talk-send">Сказать</button>
-      <button id="talk-close">Закрыть</button>
+      <div class="talk-chips" id="talk-chips"></div>
+      <div class="talk-row">
+        <button id="talk-mic" title="Сказать голосом">🎤</button>
+        <input id="talk-input" type="text" maxlength="160" placeholder="Сказать советнику…" autocomplete="off" />
+        <button id="talk-send">Сказать</button>
+        <button id="talk-close">Закрыть</button>
+      </div>
     </div>
     <div class="flash" id="flash"></div>
 

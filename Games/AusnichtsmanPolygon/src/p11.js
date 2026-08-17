@@ -386,6 +386,7 @@ function updateGrass(x, z) {
         const y = gammaMeshH(px, pz);
         // на дороге, в воде и на выжженной земле трава не растёт
         if (y < G.sea + 1.5 || roadDist(px, pz) < 9 || onCityStreet(px, pz)) continue;
+        if (typeof CAFE !== 'undefined' && Math.hypot(px - CAFE.x, pz - CAFE.z) < 15) continue;
         let burnt = 0;
         for (const c of CRATERS) burnt = Math.max(burnt, 1 - smoothstep(70, 130, Math.hypot(px - c.x, pz - c.z)));
         if (burnt > 0.5) continue;
@@ -471,8 +472,28 @@ void main() {
    иначе на сто пятьдесят стволов уйдёт триста вызовов отрисовки. */
 
 const TREES = [];
-const TREE_CHUNK = 34;
+const TREE_CHUNK = 14;   // дерево стало подробным: в кусок больше не влезает
 const treeChunks = [];
+
+/**
+ * Куски рощи собираем жадно из ближайших соседей: берём первое
+ * неразобранное дерево и добираем к нему тринадцать самых близких.
+ * Сортировка по клеткам такого не даёт — строка сетки тянется через весь
+ * мир, и оболочка куска выходит в километры, отсекать нечего.
+ */
+function sortTreesSpatially() {
+  const left = TREES.slice();
+  const out = [];
+  while (left.length) {
+    const seed = left.shift();
+    const group = [seed];
+    left.sort((a, b) => (Math.hypot(a.x - seed.x, a.z - seed.z) - Math.hypot(b.x - seed.x, b.z - seed.z)));
+    for (let i = 0; i < TREE_CHUNK - 1 && left.length; i++) group.push(left.shift());
+    for (const t of group) out.push(t);
+  }
+  TREES.length = 0;
+  for (const t of out) TREES.push(t);
+}
 
 function seedTrees() {
   const R = rngLite(20240915);
@@ -503,6 +524,7 @@ function seedTrees() {
   }
 }
 seedTrees();
+sortTreesSpatially();
 
 /** Кладёт одно дерево в накопители: ствол с ветками и грозди листвы. */
 function pushTree(t, wood, leaf) {
@@ -530,56 +552,85 @@ function pushTree(t, wood, leaf) {
   };
 
   const scorch = 1 - t.burn * 0.72;
+  const conifer = (t.seed % 3) === 0;                 // каждое третье — хвойное
   const bark = [0.24 * scorch, 0.185 * scorch, 0.135 * scorch];
   const barkLight = [0.34 * scorch, 0.27 * scorch, 0.20 * scorch];
+  const barkDark = [0.16 * scorch, 0.125 * scorch, 0.095 * scorch];
 
-  // ствол: неровный, к верху тоньше
-  const H = 7.5 + R() * 4.5;
+  /* Ствол: неровный, к верху тоньше, с продольными бороздами коры —
+     их даёт чередование цвета по кольцам и лёгкий разброс радиуса. */
+  const H = (conifer ? 10.5 : 7.5) + R() * 4.5;
   const nodes = [], radii = [];
-  for (let i = 0; i <= 5; i++) {
-    const u = i / 5;
-    nodes.push(place((R() - 0.5) * 0.5 * u, u * H, (R() - 0.5) * 0.5 * u));
-    radii.push((0.42 - u * 0.28) * s * (0.85 + R() * 0.3));
+  const STEPS = 6;
+  for (let i = 0; i <= STEPS; i++) {
+    const u = i / STEPS;
+    nodes.push(place((R() - 0.5) * 0.55 * u, u * H, (R() - 0.5) * 0.55 * u));
+    radii.push((0.46 - u * 0.33) * s * (0.86 + R() * 0.28));
   }
-  wood.rope(nodes, radii, i => (i > 3 ? barkLight : bark), 7);
+  wood.rope(nodes, radii, (i) => (i % 2 ? bark : (i > STEPS - 3 ? barkLight : barkDark)), 7);
 
-  // корневые наплывы
-  for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * TAU + R();
-    wood.rope([place(Math.cos(a) * 0.55, 0.02, Math.sin(a) * 0.55), place(0, 1.1, 0)],
-              [0.16 * s, 0.30 * s], bark, 5);
+  // корневые наплывы у комля
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * TAU + R();
+    wood.rope([place(Math.cos(a) * 0.62, 0.02, Math.sin(a) * 0.62),
+               place(Math.cos(a) * 0.30, 0.55, Math.sin(a) * 0.30),
+               place(0, 1.2, 0)],
+              [0.13 * s, 0.20 * s, 0.30 * s], barkDark, 5);
   }
 
-  // ветви: от двух третей ствола, каждая раздваивается
-  const nb = 5 + ((R() * 3) | 0);
+  /* Ветви трёх порядков: от ствола, раздвоение, и тонкие побеги —
+     именно они делают крону не шаром, а деревом. */
+  const nb = conifer ? 9 + ((R() * 3) | 0) : 6 + ((R() * 3) | 0);
   const crowns = [];
   for (let i = 0; i < nb; i++) {
-    const a = (i / nb) * TAU + R() * 0.7;
-    const y0 = H * (0.52 + R() * 0.38);
-    const len = (1.9 + R() * 1.9);
-    const tipX = Math.cos(a) * len, tipZ = Math.sin(a) * len, tipY = y0 + len * (0.55 + R() * 0.5);
-    wood.rope([place(0, y0, 0), place(tipX * 0.5, y0 + len * 0.32, tipZ * 0.5), place(tipX, tipY, tipZ)],
-              [0.17 * s, 0.11 * s, 0.05 * s], bark, 5);
-    crowns.push(place(tipX, tipY, tipZ));
-    // раздвоение
-    const a2 = a + (R() - 0.5) * 1.2;
-    const l2 = len * 0.55;
-    const t2 = place(tipX + Math.cos(a2) * l2, tipY + l2 * 0.5, tipZ + Math.sin(a2) * l2);
-    wood.rope([place(tipX, tipY, tipZ), t2], [0.05 * s, 0.025 * s], bark, 4);
-    crowns.push(t2);
-  }
-  crowns.push(place(0, H * 1.03, 0));
+    const a = (i / nb) * TAU + R() * 0.8;
+    const u0 = conifer ? 0.28 + (i / nb) * 0.62 : 0.48 + R() * 0.42;
+    const y0 = H * u0;
+    const len = (conifer ? (1 - u0) * 4.2 + 0.8 : 2.0 + R() * 2.0);
+    const rise = conifer ? -0.18 : 0.55 + R() * 0.5;
+    const tipX = Math.cos(a) * len, tipZ = Math.sin(a) * len, tipY = y0 + len * rise;
+    wood.rope([place(0, y0, 0),
+               place(tipX * 0.42, y0 + len * rise * 0.30, tipZ * 0.42),
+               place(tipX * 0.76, y0 + len * rise * 0.72, tipZ * 0.76),
+               place(tipX, tipY, tipZ)],
+              [0.19 * s, 0.13 * s, 0.085 * s, 0.045 * s], i % 2 ? bark : barkDark, 5);
+    crowns.push([place(tipX, tipY, tipZ), 1]);
 
-  // листва: на каждом окончании крест из трёх карт; обгоревшая — чёрная,
-  // и на поваленном дереве её остаётся меньше
-  const tint = t.burn > 0.5 ? [0.20, 0.16, 0.13] : [1, 1, 1];
+    // второй порядок
+    for (let k = 0; k < 2; k++) {
+      const a2 = a + (k ? 0.75 : -0.75) + (R() - 0.5) * 0.5;
+      const l2 = len * (0.42 + R() * 0.28);
+      const bx = tipX * 0.72, bz = tipZ * 0.72, by = y0 + len * rise * 0.68;
+      const t2x = bx + Math.cos(a2) * l2, t2z = bz + Math.sin(a2) * l2;
+      const t2y = by + l2 * (conifer ? -0.12 : 0.42);
+      wood.rope([place(bx, by, bz), place(t2x, t2y, t2z)],
+                [0.075 * s, 0.032 * s], bark, 4);
+      crowns.push([place(t2x, t2y, t2z), 0.75]);
+      // третий порядок — короткие побеги
+      if (R() < 0.7) {
+        const a3 = a2 + (R() - 0.5) * 1.4;
+        const l3 = l2 * 0.45;
+        const t3 = place(t2x + Math.cos(a3) * l3, t2y + l3 * 0.3, t2z + Math.sin(a3) * l3);
+        wood.rope([place(t2x, t2y, t2z), t3], [0.030 * s, 0.015 * s], bark, 3);
+        crowns.push([t3, 0.52]);
+      }
+    }
+  }
+  crowns.push([place(0, H * 1.02, 0), conifer ? 0.7 : 1.1]);
+
+  /* Листва: на каждом окончании крест из карт, размер по толщине ветки.
+     Обгоревшая чернеет и редеет, поваленная — теряет половину. */
+  const tint = t.burn > 0.5 ? [0.20, 0.16, 0.13]
+             : conifer ? [0.62, 0.82, 0.66] : [1, 1, 1];
   const keep = t.fell > 0.5 ? 0.45 : 1;
-  for (const c of crowns) {
+  for (const [c, w] of crowns) {
     if (R() > keep) continue;
-    const rr = (1.5 + R() * 1.1) * s * (t.burn > 0.5 ? 0.72 : 1);
-    for (let k = 0; k < 3; k++) {
-      const a = (k / 3) * Math.PI + R() * 0.4;
-      leaf.card(c[0], c[1], c[2], rr, a, tint, (c[0] + c[2]) * 0.4);
+    const rr = (conifer ? 1.0 : 1.35) * w * (0.85 + R() * 0.5) * s * (t.burn > 0.5 ? 0.7 : 1);
+    const n = w > 0.9 ? 3 : 2;
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI + R() * 0.5;
+      leaf.card(c[0] + (R() - 0.5) * rr * 0.4, c[1] + (R() - 0.5) * rr * 0.3,
+                c[2] + (R() - 0.5) * rr * 0.4, rr, a, tint, (c[0] + c[2]) * 0.4);
     }
   }
 }
@@ -658,10 +709,15 @@ function leafBuilder() {
 
 function buildTreeChunk(ci) {
   const wood = woodBuilder(), leaf = leafBuilder();
-  for (let i = ci * TREE_CHUNK; i < Math.min((ci + 1) * TREE_CHUNK, TREES.length); i++) {
+  let cx = 0, cz = 0, n = 0, r = 0;
+  const from = ci * TREE_CHUNK, to = Math.min((ci + 1) * TREE_CHUNK, TREES.length);
+  for (let i = from; i < to; i++) { cx += TREES[i].x; cz += TREES[i].z; n++; }
+  cx /= n || 1; cz /= n || 1;
+  for (let i = from; i < to; i++) {
     pushTree(TREES[i], wood, leaf);
+    r = Math.max(r, Math.hypot(TREES[i].x - cx, TREES[i].z - cz) + 14 * TREES[i].s);
   }
-  return { wood: wood.raw.pack(), leaf: leaf.pack() };
+  return { wood: wood.raw.pack(), leaf: leaf.pack(), cx, cz, r };
 }
 
 function buildTrees() {
@@ -1169,6 +1225,7 @@ function gammaAssets() {
     car: buildCar(),
     dash: buildCarDash(),
     sith: buildSith(),
+    cafe: buildCafe(),
     blade: buildBlade(),
     soil: texture(makeSoilTexture(), { wrap: gl.REPEAT }),
     grass: texture(makeGrassTexture(), { mips: true }),
@@ -1176,6 +1233,22 @@ function gammaAssets() {
   };
   rebuildBuildings();
   return GA;
+}
+
+/**
+ * Видно ли кусок рощи: дальше километра не рисуем вовсе, за спиной —
+ * если оболочка целиком за плоскостью взгляда.
+ */
+function chunkVisible(c, eye, f, maxDist) {
+  const dx = c.cx - eye[0], dz = c.cz - eye[2];
+  const d = Math.hypot(dx, dz);
+  if (d - c.r > (maxDist || 1100)) return false;
+  if (d < c.r) return true;
+  // косинус между направлением взгляда и направлением на кусок
+  const fl = Math.hypot(f[0], f[2]) || 1;
+  const dot = (dx * f[0] + dz * f[2]) / (d * fl);
+  const slack = Math.asin(Math.min(c.r / d, 1)) + 0.95;   // половина поля зрения с запасом
+  return dot > Math.cos(Math.min(slack, Math.PI));
 }
 
 /** Всё, что стоит на Гамме: море, бассейн, кварталы, роща, трава, машина, советник. */
@@ -1224,6 +1297,7 @@ function drawGamma(vp, eye, f, fogK) {
   solid(A.pool);
   solid(CAR.inside ? A.dash : A.car, carMatrix(model));
   solid(A.sith, SITH.model);
+  drawCity(solid, model);
 
   // кварталы: один общий буфер, пересобираем только когда что-то падает
   if (buildingsDirty) rebuildBuildings();
@@ -1236,7 +1310,10 @@ function drawGamma(vp, eye, f, fogK) {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ch.idx);
     gl.drawElements(gl.TRIANGLES, ch.count, gl.UNSIGNED_SHORT, 0);
   }
-  for (const c of treeChunks) solid(c.wood);
+  /* Стволы рисуем только вблизи: за три сотни метров ветка занимает меньше
+     пикселя, а крона всё равно на месте. Дальние и заспинные куски рощи
+     пропускаем целиком. */
+  for (const c of treeChunks) if (chunkVisible(c, eye, f, 320)) solid(c.wood);
 
   // — клинок советника: аддитивное свечение поверх
   if (SITH.saber > 0.02) {
@@ -1271,6 +1348,7 @@ function drawGamma(vp, eye, f, fogK) {
   gl.bindTexture(gl.TEXTURE_2D, A.leaf);
   gl.uniform1i(foliageProg.u.uTex, 0);
   for (const c of treeChunks) {
+    if (!chunkVisible(c, eye, f)) continue;
     attrib(foliageProg.a.aPos, c.leaf.pos, 3);
     attrib(foliageProg.a.aNormal, c.leaf.nrm, 3);
     attrib(foliageProg.a.aUv, c.leaf.uv, 2);

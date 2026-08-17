@@ -8,53 +8,127 @@
    а не вокруг пяток. */
 function buildSith() {
   const m = meshBuilder();
-  const cloth = [0.055, 0.050, 0.062];
-  const clothLit = [0.115, 0.105, 0.125];
-  const skin = [0.72, 0.66, 0.58];
-  const hilt = [0.28, 0.28, 0.30];
-  const hiltLit = [0.62, 0.62, 0.66];
+  const cloth = [0.050, 0.046, 0.058];
+  const clothMid = [0.085, 0.078, 0.095];
+  const clothLit = [0.130, 0.118, 0.142];
+  const sash = [0.10, 0.07, 0.07];
+  const skin = [0.70, 0.63, 0.55];
+  const skinDark = [0.46, 0.40, 0.36];
+  const hilt = [0.26, 0.26, 0.28];
+  const hiltLit = [0.66, 0.66, 0.70];
+  const hiltDark = [0.14, 0.14, 0.16];
 
-  // балахон: конус от подола к плечам
-  const seg = 14;
+  /* Балахон складками: радиус подола гуляет по углу, и каждая грань
+     красится своим тоном — так ткань перестаёт быть гладким конусом. */
+  const seg = 26;
+  const fold = (a) => 0.50 + 0.055 * Math.sin(a * 5) + 0.03 * Math.sin(a * 9 + 1.1);
   for (let i = 0; i < seg; i++) {
     const a0 = (i / seg) * TAU, a1 = ((i + 1) / seg) * TAU;
-    const rb = 0.52, rt = 0.30;
-    const A = [Math.cos(a0) * rb, -0.92, Math.sin(a0) * rb];
-    const B = [Math.cos(a1) * rb, -0.92, Math.sin(a1) * rb];
-    const C = [Math.cos(a1) * rt, 0.42, Math.sin(a1) * rt];
-    const D = [Math.cos(a0) * rt, 0.42, Math.sin(a0) * rt];
-    m.quad(A, B, C, D, i % 2 ? cloth : clothLit);
-    // подол
-    m.tri([0, -0.94, 0], B, A, cloth);
+    const r0 = fold(a0), r1 = fold(a1);
+    const rt = 0.29;
+    const shade = 0.5 + 0.5 * Math.sin(a0 * 5);
+    const c = shade > 0.66 ? clothLit : shade > 0.33 ? clothMid : cloth;
+    // подол, средняя часть и грудь — три яруса, чтобы складка шла по всей высоте
+    m.quad([Math.cos(a0) * r0, -0.94, Math.sin(a0) * r0],
+           [Math.cos(a1) * r1, -0.94, Math.sin(a1) * r1],
+           [Math.cos(a1) * (rt + (r1 - rt) * 0.45), -0.30, Math.sin(a1) * (rt + (r1 - rt) * 0.45)],
+           [Math.cos(a0) * (rt + (r0 - rt) * 0.45), -0.30, Math.sin(a0) * (rt + (r0 - rt) * 0.45)], c);
+    m.quad([Math.cos(a0) * (rt + (r0 - rt) * 0.45), -0.30, Math.sin(a0) * (rt + (r0 - rt) * 0.45)],
+           [Math.cos(a1) * (rt + (r1 - rt) * 0.45), -0.30, Math.sin(a1) * (rt + (r1 - rt) * 0.45)],
+           [Math.cos(a1) * rt, 0.42, Math.sin(a1) * rt],
+           [Math.cos(a0) * rt, 0.42, Math.sin(a0) * rt], c);
+    m.tri([0, -0.97, 0], [Math.cos(a1) * r1, -0.94, Math.sin(a1) * r1],
+          [Math.cos(a0) * r0, -0.94, Math.sin(a0) * r0], cloth);
   }
-  // плечи и мантия поверх
-  m.blob(0, 0.44, 0, 0.36, 0.20, 0.28, cloth, 10, 6);
-  for (const s of [-1, 1]) {
-    m.rope([[s * 0.28, 0.46, 0], [s * 0.33, 0.10, 0.06], [s * 0.30, -0.30, 0.14]],
-           [0.13, 0.11, 0.09], cloth, 6);
+  // пояс: витой шнур в два оборота
+  for (let k = 0; k < 2; k++) {
+    const nodes = [];
+    for (let i = 0; i <= 20; i++) {
+      const a = (i / 20) * TAU;
+      nodes.push([Math.cos(a) * 0.315, -0.13 - k * 0.06 + Math.sin(a * 3) * 0.012, Math.sin(a) * 0.30]);
+    }
+    m.rope(nodes, nodes.map(() => 0.022), sash, 5);
   }
-  // капюшон: конус над головой, внутри пусто и темно
-  m.blob(0, 0.72, -0.02, 0.23, 0.26, 0.24, cloth, 12, 7);
+  // свисающий конец пояса
+  m.rope([[0.10, -0.17, 0.30], [0.13, -0.42, 0.33], [0.11, -0.66, 0.31]],
+         [0.020, 0.017, 0.012], sash, 5);
+
+  // плечи и накидка поверх балахона
+  m.blob(0, 0.44, 0, 0.37, 0.20, 0.29, clothMid, 12, 7);
+  for (let i = 0; i < 16; i++) {
+    const a0 = (i / 16) * TAU, a1 = ((i + 1) / 16) * TAU;
+    const rr = 0.40 + 0.03 * Math.sin(a0 * 4);
+    m.quad([Math.cos(a0) * 0.30, 0.46, Math.sin(a0) * 0.26],
+           [Math.cos(a1) * 0.30, 0.46, Math.sin(a1) * 0.26],
+           [Math.cos(a1) * rr, 0.02, Math.sin(a1) * rr * 0.9],
+           [Math.cos(a0) * rr, 0.02, Math.sin(a0) * rr * 0.9],
+           i % 2 ? cloth : clothMid);
+  }
+
+  /* Руки: широкий рукав до локтя, узкий манжет, кисть с пальцами. */
+  for (const sx of [-1, 1]) {
+    m.rope([[sx * 0.30, 0.44, 0.01], [sx * 0.36, 0.16, 0.05], [sx * 0.34, -0.10, 0.11]],
+           [0.15, 0.14, 0.115], clothMid, 7);
+    m.rope([[sx * 0.34, -0.10, 0.11], [sx * 0.33, -0.24, 0.15]], [0.075, 0.055], cloth, 6);
+    // ладонь
+    const hx = sx * 0.325, hy = -0.31, hz = 0.18;
+    m.blob(hx, hy, hz, 0.048, 0.055, 0.036, skin, 8, 5);
+    // четыре пальца и большой
+    for (let f = 0; f < 4; f++) {
+      const o = (f - 1.5) * 0.023;
+      m.rope([[hx + o * 0.6, hy - 0.03, hz + 0.02], [hx + o, hy - 0.085, hz + 0.045]],
+             [0.013, 0.010], skin, 4);
+    }
+    m.rope([[hx - sx * 0.035, hy - 0.01, hz + 0.01], [hx - sx * 0.062, hy - 0.05, hz + 0.035]],
+           [0.014, 0.011], skin, 4);
+  }
+
+  /* Капюшон: внешний конус складками, тёмная подкладка и лицо в тени. */
+  for (let i = 0; i < 18; i++) {
+    const a0 = (i / 18) * TAU, a1 = ((i + 1) / 18) * TAU;
+    const r = 0.285 + 0.018 * Math.sin(a0 * 6);
+    const c = i % 3 ? cloth : clothMid;
+    m.quad([Math.cos(a0) * r, 0.50, Math.sin(a0) * r - 0.02],
+           [Math.cos(a1) * r, 0.50, Math.sin(a1) * r - 0.02],
+           [Math.cos(a1) * 0.12, 1.00, Math.sin(a1) * 0.12 - 0.07],
+           [Math.cos(a0) * 0.12, 1.00, Math.sin(a0) * 0.12 - 0.07], c);
+  }
+  // подкладка капюшона: почти чёрная, за счёт неё лицо в тени
+  m.blob(0, 0.71, -0.03, 0.225, 0.255, 0.235, [0.020, 0.018, 0.024], 12, 7);
+  // козырёк капюшона нависает над лбом
   for (let i = 0; i < 12; i++) {
-    const a0 = (i / 12) * TAU, a1 = ((i + 1) / 12) * TAU;
-    const r = 0.27;
-    m.quad([Math.cos(a0) * r, 0.52, Math.sin(a0) * r - 0.02],
-           [Math.cos(a1) * r, 0.52, Math.sin(a1) * r - 0.02],
-           [Math.cos(a1) * 0.10, 0.98, Math.sin(a1) * 0.10 - 0.06],
-           [Math.cos(a0) * 0.10, 0.98, Math.sin(a0) * 0.10 - 0.06],
-           i % 3 ? cloth : clothLit);
+    const a0 = -1.2 + (i / 12) * 2.4, a1 = -1.2 + ((i + 1) / 12) * 2.4;
+    m.quad([Math.sin(a0) * 0.24, 0.86, 0.16 + Math.cos(a0) * 0.06],
+           [Math.sin(a1) * 0.24, 0.86, 0.16 + Math.cos(a1) * 0.06],
+           [Math.sin(a1) * 0.20, 0.74, 0.235 + Math.cos(a1) * 0.05],
+           [Math.sin(a0) * 0.20, 0.74, 0.235 + Math.cos(a0) * 0.05], cloth);
   }
-  // подбородок в тени капюшона
-  m.blob(0, 0.63, 0.15, 0.10, 0.075, 0.06, skin, 8, 5);
-  m.blob(0, 0.70, 0.19, 0.055, 0.035, 0.03, [0.30, 0.26, 0.24], 6, 4);
 
-  // кисти
-  m.blob(0.34, -0.30, 0.16, 0.065, 0.075, 0.055, skin, 7, 5);
-  m.blob(-0.32, -0.28, 0.14, 0.060, 0.070, 0.050, skin, 7, 5);
+  /* Лицо: череп, надбровья, нос, впалые щёки, губы и блики глаз.
+     Всё в тени капюшона, поэтому берём приглушённые тона. */
+  m.blob(0, 0.685, 0.09, 0.105, 0.125, 0.095, skinDark, 12, 8);
+  m.blob(0, 0.735, 0.135, 0.088, 0.045, 0.055, skinDark, 9, 5);      // лоб
+  for (const sx of [-1, 1]) {
+    m.blob(sx * 0.043, 0.716, 0.160, 0.036, 0.018, 0.022, skin, 7, 4);   // надбровье
+    m.blob(sx * 0.040, 0.690, 0.163, 0.020, 0.014, 0.010, [0.86, 0.80, 0.62], 6, 4);
+    m.blob(sx * 0.040, 0.690, 0.170, 0.009, 0.009, 0.005, [0.55, 0.12, 0.08], 5, 4);
+    m.blob(sx * 0.085, 0.672, 0.115, 0.030, 0.040, 0.030, skinDark, 7, 5);  // впалая щека
+  }
+  m.blob(0, 0.672, 0.175, 0.020, 0.036, 0.028, skin, 7, 5);           // нос
+  m.blob(0, 0.640, 0.168, 0.030, 0.010, 0.014, [0.42, 0.30, 0.28], 7, 4);  // губы
+  m.blob(0, 0.612, 0.150, 0.048, 0.032, 0.035, skinDark, 8, 5);       // подбородок
 
-  // рукоять меча в правой руке
-  m.rope([[0.40, -0.34, 0.24], [0.40, -0.06, 0.24]], [0.030, 0.030], hilt, 7);
-  m.rope([[0.40, -0.09, 0.24], [0.40, -0.03, 0.24]], [0.036, 0.032], hiltLit, 7);
+  /* Рукоять: набалдашник, рифлёная хватка, кольца и эмиттер. */
+  const hx = 0.325, hy = -0.31, hz = 0.18;
+  m.rope([[hx, hy - 0.10, hz + 0.05], [hx, hy - 0.06, hz + 0.04]], [0.030, 0.034], hiltDark, 8);
+  for (let i = 0; i < 6; i++) {
+    const y0 = hy - 0.06 + i * 0.026;
+    m.rope([[hx, y0, hz + 0.04 - i * 0.002], [hx, y0 + 0.018, hz + 0.04 - i * 0.002]],
+           [i % 2 ? 0.033 : 0.029, i % 2 ? 0.033 : 0.029], i % 2 ? hilt : hiltDark, 8);
+  }
+  m.rope([[hx, hy + 0.10, hz + 0.028], [hx, hy + 0.13, hz + 0.026]], [0.036, 0.032], hiltLit, 8);
+  m.rope([[hx, hy + 0.13, hz + 0.026], [hx, hy + 0.16, hz + 0.024]], [0.028, 0.024], hiltDark, 8);
+  m.box(hx + 0.034, hy + 0.02, hz + 0.042, 0.008, 0.030, 0.012, 0, [0.62, 0.16, 0.12]);  // клавиша
   return m.pack();
 }
 
@@ -65,8 +139,8 @@ function buildBlade() {
     const seg = 8, base = pos.length / 3;
     for (let i = 0; i <= seg; i++) {
       const a = (i / seg) * TAU;
-      pos.push(0.40 + Math.cos(a) * r, y0, 0.24 + Math.sin(a) * r);
-      pos.push(0.40 + Math.cos(a) * r, y1, 0.24 + Math.sin(a) * r);
+      pos.push(0.325 + Math.cos(a) * r, y0, 0.204 + Math.sin(a) * r);
+      pos.push(0.325 + Math.cos(a) * r, y1, 0.204 + Math.sin(a) * r);
       fade.push(f, f);
     }
     for (let i = 0; i < seg; i++) {
@@ -75,11 +149,11 @@ function buildBlade() {
     }
     // торец
     const cap = pos.length / 3;
-    pos.push(0.40, y1, 0.24); fade.push(f);
+    pos.push(0.325, y1, 0.204); fade.push(f);
     for (let i = 0; i < seg; i++) idx.push(cap, base + i * 2 + 1, base + (i + 1) * 2 + 1);
   };
-  tube(0.022, 1.0, -0.02, 1.28);      // ядро
-  tube(0.055, 0.30, -0.02, 1.30);     // ореол
+  tube(0.021, 1.0, -0.15, 1.18);      // ядро
+  tube(0.052, 0.30, -0.15, 1.20);     // ореол
   return { pos: buffer(new Float32Array(pos)), fade: buffer(new Float32Array(fade)),
            idx: buffer(new Uint16Array(idx), gl.ELEMENT_ARRAY_BUFFER), count: idx.length };
 }
@@ -93,6 +167,10 @@ const SITH = {
   model: m4(),
   saber: 0.3,         // выдвинутость клинка
   talk: 0,            // сколько ещё говорит
+  follow: false,      // идёт следом и садится в машину
+  step: 0,            // фаза шага, для покачивания на ходу
+  guard: 0,           // сколько ещё отбивается от нападающих
+  target: null,       // кого сейчас отгоняет
 };
 
 /**
@@ -102,16 +180,62 @@ const SITH = {
 function updateSith(dt) {
   if (game.world !== 'gamma') { SITH.flip = 0; return; }
   const s = SITH;
-  const gy = gammaMeshH(s.x, s.z);
-  const dx = cam.x - s.x, dz = cam.z - s.z;
-  const near = Math.hypot(dx, dz) < 30;
-  if (near) s.yaw = damp(s.yaw, Math.atan2(dx, -dz), 3, dt);
 
-  s.saber = damp(s.saber, near || s.flip > 0 ? 1 : 0.15, 2.2, dt);
+  /* В машине советник занимает пассажирское место: садится и выходит
+     вместе с водителем, отдельной команды не нужно. */
+  if (s.follow && CAR.inside) {
+    const co = Math.cos(CAR.yaw), si = Math.sin(CAR.yaw);
+    s.x = CAR.x + co * 0.52 - si * 0.10;
+    s.z = CAR.z + si * 0.52 + co * 0.10;
+    s.y = CAR.y + 1.20;
+    s.yaw = CAR.yaw;
+    s.flip = 0;
+    s.saber = damp(s.saber, 0.12, 2.2, dt);
+    s.talk = Math.max(0, s.talk - dt);
+    m4compose(s.model, s.x, s.y, s.z, s.yaw, 0, 0, 0.86);
+    return;
+  }
+
+  const dx = cam.x - s.x, dz = cam.z - s.z;
+  const dist = Math.hypot(dx, dz);
+  let moving = 0;
+
+  if (s.follow) {
+    // держимся в паре шагов позади-справа, отстали — прибавляем шаг
+    const want = 2.8;
+    if (dist > 45) {
+      // отстал слишком сильно — появляется за спиной, чтобы не бежать полкилометра
+      const back = cam.yaw + Math.PI;
+      s.x = cam.x + Math.sin(back) * 3.2;
+      s.z = cam.z - Math.cos(back) * 3.2;
+    } else if (dist > want) {
+      const sp = Math.min(4.2 + (dist - want) * 2.2, 22);
+      const k = Math.min(sp * dt / dist, 1);
+      s.x += dx * k; s.z += dz * k;
+      moving = Math.min(sp / 4, 1);
+    }
+    s.yaw = damp(s.yaw, Math.atan2(dx, -dz), 5, dt);
+  } else if (dist < 30) {
+    s.yaw = damp(s.yaw, Math.atan2(dx, -dz), 3, dt);
+  }
+
+  // если он кого-то отгоняет, смотрит на нападающего и держит клинок
+  if (s.guard > 0) {
+    s.guard -= dt;
+    if (s.target) {
+      s.yaw = damp(s.yaw, Math.atan2(s.target.x - s.x, -(s.target.z - s.z)), 7, dt);
+    }
+    if (s.guard <= 0) s.target = null;
+  }
+
+  const near = dist < 30 || s.follow;
+  s.saber = damp(s.saber, near || s.flip > 0 || s.guard > 0 ? 1 : 0.15, 2.2, dt);
   s.talk = Math.max(0, s.talk - dt);
 
   s.flipAt -= dt;
-  if (s.flip === 0 && s.flipAt <= 0 && near) { s.flip = 0.0001; s.flipAt = 14 + Math.random() * 16; }
+  if (s.flip === 0 && s.flipAt <= 0 && near && s.guard <= 0) {
+    s.flip = 0.0001; s.flipAt = 14 + Math.random() * 16;
+  }
   if (s.flip > 0) {
     s.flip += dt / 1.15;                      // сальто длится чуть больше секунды
     if (s.flip >= 1) s.flip = 0;
@@ -119,9 +243,24 @@ function updateSith(dt) {
   const f = s.flip;
   const jump = f > 0 ? Math.sin(f * Math.PI) * 2.4 : 0;
   const spin = f > 0 ? -f * TAU : 0;
-  const bob = Math.sin(game.proper * 1.1) * 0.03 + (s.talk > 0 ? Math.sin(game.proper * 9) * 0.02 : 0);
-  s.y = gy + 0.98 + jump + bob;
-  m4compose(s.model, s.x, s.y, s.z, s.yaw, spin, 0, 1);
+  s.step += dt * (6 + moving * 8) * (moving > 0.02 ? 1 : 0.12);
+  const bob = Math.sin(s.step) * (0.02 + moving * 0.06)
+            + (s.talk > 0 ? Math.sin(game.proper * 9) * 0.02 : 0);
+  const lean = moving * 0.10 + (s.guard > 0 ? 0.08 : 0);
+  s.y = gammaMeshH(s.x, s.z) + 0.98 + jump + bob;
+  m4compose(s.model, s.x, s.y, s.z, s.yaw, spin + lean, Math.sin(s.step * 0.5) * moving * 0.04, 1);
+}
+
+/** Включить или выключить сопровождение. */
+function sithFollow(on) {
+  if (SITH.follow === on) return;
+  SITH.follow = on;
+  if (on) {
+    SITH.x = cam.x - 2.4; SITH.z = cam.z - 2.4;
+    sithSay('Иду за вами. Постарайтесь не оборачиваться слишком часто.');
+  } else {
+    sithSay('Останусь здесь. Позовёте — приду.');
+  }
 }
 
 /* ---------------- разговор ---------------- */
@@ -168,6 +307,16 @@ const SITH_LINES = [
     a: ['Не благодарите. Я записываю.'] },
   { k: ['пока', 'прощай', 'до свид'],
     a: ['Идите. Я останусь — мне здесь спокойно.'] },
+  { k: ['пойдём', 'пойдем', 'со мной', 'идём со', 'идем со', 'сопровожд', 'за мной'],
+    a: ['__FOLLOW_ON__'] },
+  { k: ['останься', 'жди здесь', 'подожди', 'стой тут', 'не иди'],
+    a: ['__FOLLOW_OFF__'] },
+  { k: ['кафе', 'кофе', 'бариста', 'выпить', 'перекус'],
+    a: ['В городе есть заведение с открытым фасадом. Бариста там внимательнее меня.',
+        'Кофе не проясняет мысли. Но руки перестают дрожать после испытаний.'] },
+  { k: ['напад', 'хулиган', 'прохож', 'защит', 'бандит', 'драк'],
+    a: ['В городе бывают невежливые. Держитесь рядом — я разберусь.',
+        'Пока я иду за вами, к вам никто не подойдёт дважды.'] },
 ];
 
 const SITH_DEFAULT = [
@@ -185,7 +334,11 @@ function sithReply(text) {
   for (const g of SITH_LINES) {
     if (g.k.some((k) => t.includes(k))) {
       if (g.k.includes('сальто') && SITH.flip === 0) SITH.flip = 0.0001;
-      return g.a[(sithReplyIdx++) % g.a.length];
+      const a = g.a[(sithReplyIdx++) % g.a.length];
+      // две реплики не отвечают, а переключают поведение
+      if (a === '__FOLLOW_ON__') { setTimeout(() => sithFollow(true), 0); return 'Как скажете.'; }
+      if (a === '__FOLLOW_OFF__') { setTimeout(() => sithFollow(false), 0); return 'Как скажете.'; }
+      return a;
     }
   }
   return SITH_DEFAULT[(sithReplyIdx++) % SITH_DEFAULT.length];
@@ -214,10 +367,13 @@ function openTalk() {
   const w = document.getElementById('talk');
   w.classList.add('show');
   document.getElementById('app').classList.add('talking');
-  document.getElementById('talk-input').focus();
+  refreshChips();
+  // на планшете фокус в поле поднимает клавиатуру поверх реплик — не лезем
+  if (!window.matchMedia('(pointer: coarse)').matches) document.getElementById('talk-input').focus();
 }
 
 function closeTalk() {
+  if (voice.on && voice.rec) { try { voice.rec.stop(); } catch (e) {} }
   document.getElementById('talk').classList.remove('show');
   document.getElementById('app').classList.remove('talking');
   document.getElementById('talk-input').blur();
@@ -410,4 +566,85 @@ function carSoundLevel() {
   carSnd.filt.frequency.setTargetAtTime(320 + rpm * 780, t, 0.12);
   carSnd.gain.gain.setTargetAtTime(0.035 + rpm * 0.055, t, 0.12);
   carSnd.tyreGain.gain.setTargetAtTime(Math.min(v / 64, 1) * 0.10, t, 0.2);
+}
+
+/* ---------------- готовые реплики и голос ---------------- */
+
+/* На планшете печатать неудобно: рядом с полем ввода лежит набор готовых
+   фраз, который обновляется после каждого ответа, и кнопка микрофона. */
+const TALK_CHIPS = [
+  'Привет', 'Кто ты такой?', 'Как запустить бомбу?', 'Покажи сальто',
+  'Расскажи про меч', 'Где здесь город?', 'Что за золотой бассейн?',
+  'Далеко ли море?', 'Зачем всё это?', 'Что мне тут делать?',
+  'Пойдём со мной', 'Останься здесь', 'Расскажи про квазар',
+  'Что такое Сила?', 'Где кофе можно выпить?', 'Спасибо',
+];
+
+let chipFrom = 0;
+
+/** Показывает четыре свежие реплики, каждый раз сдвигая окно по списку. */
+function refreshChips() {
+  const box = document.getElementById('talk-chips');
+  if (!box) return;
+  box.textContent = '';
+  for (let i = 0; i < 4; i++) {
+    const text = TALK_CHIPS[(chipFrom + i) % TALK_CHIPS.length];
+    const b = document.createElement('button');
+    b.textContent = text;
+    b.addEventListener('click', () => { saySith(text); });
+    box.appendChild(b);
+  }
+  chipFrom = (chipFrom + 4) % TALK_CHIPS.length;
+}
+
+/** Общий вход: и печать, и нажатие на реплику, и распознанная речь. */
+function saySith(text) {
+  const t = (text || '').trim();
+  if (!t) return;
+  sithSay(sithReply(t));
+  refreshChips();
+}
+
+/* Распознавание речи браузером. Где его нет — просто прячем кнопку. */
+const voice = { rec: null, on: false };
+
+function initVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn = document.getElementById('talk-mic');
+  if (!btn) return;
+  if (!SR) { btn.classList.add('hidden'); return; }
+  const rec = new SR();
+  rec.lang = 'ru-RU';
+  rec.interimResults = false;
+  rec.maxAlternatives = 1;
+  rec.continuous = false;
+  rec.onresult = (e) => {
+    const said = e.results[0] && e.results[0][0] ? e.results[0][0].transcript : '';
+    if (said) {
+      const inp = document.getElementById('talk-input');
+      if (inp) inp.value = '';
+      saySith(said);
+    }
+  };
+  rec.onend = () => { voice.on = false; btn.classList.remove('listening'); };
+  rec.onerror = (e) => {
+    voice.on = false;
+    btn.classList.remove('listening');
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      toast('Микрофон не разрешён — выберите реплику или напишите');
+    }
+  };
+  voice.rec = rec;
+}
+
+function toggleVoice() {
+  const btn = document.getElementById('talk-mic');
+  if (!voice.rec || !btn) return;
+  if (voice.on) { try { voice.rec.stop(); } catch (e) {} return; }
+  try {
+    voice.rec.start();
+    voice.on = true;
+    btn.classList.add('listening');
+    toast('Слушаю…');
+  } catch (e) { /* уже слушает */ }
 }

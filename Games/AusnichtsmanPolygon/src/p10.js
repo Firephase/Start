@@ -730,16 +730,17 @@ function drawBlast(vp, eye, f) {
 
 let bombShown = '';
 
+/* Видимость и доступность обновляем каждый кадр: раньше они висели за
+   кэшем подписи и «отмирали», пока что-нибудь не сменит текст. */
 function syncBombUI() {
   const btn = document.getElementById('bomb-btn');
   if (!btn) return;
   const here = game.world === 'gamma' && !game.rocket.inside && !game.tent.inside;
-  const wait = Math.max(0, bombReadyAt - game.proper);
-  const label = BLAST.bomb ? 'Летит…' : wait > 0.1 ? `Перезарядка ${wait.toFixed(0)} с` : 'Сбросить бомбу';
-  const sig = here + '|' + label;
-  if (sig === bombShown) return;          // без нужды в DOM не лезем
-  bombShown = sig;
   btn.classList.toggle('show', here);
   btn.disabled = !bombAllowed();
+  const wait = Math.max(0, bombReadyAt - game.proper);
+  const label = BLAST.bomb ? 'Летит…' : wait > 0.1 ? `Перезарядка ${Math.ceil(wait)} с` : 'Сбросить бомбу';
+  if (label === bombShown) return;        // текст трогаем, только когда он менялся
+  bombShown = label;
   btn.textContent = label;
 }

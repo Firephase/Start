@@ -581,7 +581,7 @@ canvas.addEventListener('pointerdown', (e) => {
     } else if (game.mode === 'walk') {
       const hit = pick(nx, ny);
       if (hit >= 0) { enterFocus(hit); lookId = null; }
-      else if (washHands() || tentSit() || carBoard() || rocketBoard()) lookId = null;
+      else if (buyCoffee() || washHands() || tentSit() || carBoard() || rocketBoard()) lookId = null;
     }
   }
 });
@@ -602,9 +602,13 @@ canvas.addEventListener('pointermove', (e) => {
   if (pointers.size >= 2) {
     const [p1, p2] = [...pointers.values()];
     const d = Math.hypot(p1.x - p2.x, p1.y - p2.y);
-    if (game.mode === 'focus' && pinchDist > 0) {
-      const s = SHAPES[game.focusIndex];
-      s.zoomTarget = clamp(s.zoomTarget * (d / pinchDist), 0.5, 2.6);
+    if (pinchDist > 0) {
+      if (game.mode === 'focus') {
+        const s = SHAPES[game.focusIndex];
+        s.zoomTarget = clamp(s.zoomTarget * (d / pinchDist), 0.5, 2.6);
+      } else {
+        setZoom(game.zoom * (d / pinchDist));   // щипок приближает вид
+      }
     }
     pinchDist = d;
     return;
@@ -612,9 +616,11 @@ canvas.addEventListener('pointermove', (e) => {
   if (e.pointerId !== lookId) return;
 
   if (game.mode === 'walk' || game.mode === 'rocket') {
-    cam.yaw += dx * 0.0042;
+    // на приближении палец должен водить взглядом медленнее
+    const k = 0.0042 / game.zoom;
+    cam.yaw += dx * k;
     const lim = game.rocket.inside ? 1.53 : 1.15;   // в ракете смотрим куда угодно
-    cam.pitch = clamp(cam.pitch - dy * 0.0042, -lim, game.rocket.inside ? lim : 0.95);
+    cam.pitch = clamp(cam.pitch - dy * k, -lim, game.rocket.inside ? lim : 0.95);
     return;
   }
 
@@ -655,11 +661,25 @@ canvas.addEventListener('pointercancel', endPointer);
 canvas.addEventListener('pointerleave', endPointer);
 
 window.addEventListener('wheel', (e) => {
-  if (game.mode !== 'focus') return;
   e.preventDefault();
-  const s = SHAPES[game.focusIndex];
-  s.zoomTarget = clamp(s.zoomTarget * Math.exp(-e.deltaY * 0.0012), 0.5, 2.6);
+  if (game.mode === 'focus') {
+    const s = SHAPES[game.focusIndex];
+    s.zoomTarget = clamp(s.zoomTarget * Math.exp(-e.deltaY * 0.0012), 0.5, 2.6);
+  } else {
+    // на ходу колесо приближает вид
+    setZoom(game.zoom * Math.exp(-e.deltaY * 0.0016));
+  }
 }, { passive: false });
+
+/* Приближение: сужаем поле зрения. Чувствительность взгляда падает
+   пропорционально, иначе на четырёхкратном зуме камера дёргается. */
+function setZoom(z) {
+  game.zoom = clamp(z, 1, 4);
+  const el = document.getElementById('zoom-label');
+  if (el) el.textContent = '×' + game.zoom.toFixed(1);
+  const box = document.getElementById('zoom');
+  if (box) box.classList.toggle('on', game.zoom > 1.02);
+}
 
 window.addEventListener('keydown', (e) => {
   if (diary.open) {                       // пока открыт блокнот, миром не управляем
@@ -668,7 +688,7 @@ window.addEventListener('keydown', (e) => {
   }
   keys[e.code] = true;
   if (e.code === 'Escape' && game.mode === 'focus') exitFocus();
-  if (e.code === 'KeyE' && game.mode === 'walk') { if (!washHands() && !tentSit() && !carBoard()) rocketBoard(); }
+  if (e.code === 'KeyE' && game.mode === 'walk') { if (!buyCoffee() && !washHands() && !tentSit() && !carBoard()) rocketBoard(); }
   if (e.code === 'KeyT' && game.world === 'gamma' && !CAR.inside) openTalk();
   if (e.code === 'KeyB') dropBomb();
   if (e.code === 'Escape' && game.tent.inside) tentLeave();
@@ -740,6 +760,8 @@ document.getElementById('rocket-dest').addEventListener('click', () => {
   syncRocket();
 });
 document.getElementById('bomb-btn').addEventListener('click', (e) => { e.stopPropagation(); dropBomb(); });
+document.getElementById('zoom-in').addEventListener('click', () => setZoom(game.zoom * 1.45));
+document.getElementById('zoom-out').addEventListener('click', () => setZoom(game.zoom / 1.45));
 document.getElementById('car-exit').addEventListener('click', carExit);
 /* Педали и руль держатся нажатыми: pointerdown включает, любой отпуск — гасит. */
 for (const [id, key] of [['car-gas', 'gas'], ['car-brake', 'brake'], ['car-left', 'left'], ['car-right', 'right']]) {
@@ -767,8 +789,10 @@ document.getElementById('car-auto').addEventListener('click', () => {
     const text = inp.value.trim();
     if (!text) return;
     inp.value = '';
-    sithSay(sithReply(text));
+    saySith(text);
   };
+  initVoice();
+  document.getElementById('talk-mic').addEventListener('click', toggleVoice);
   document.getElementById('talk-send').addEventListener('click', send);
   document.getElementById('talk-close').addEventListener('click', closeTalk);
   document.getElementById('talk-input').addEventListener('keydown', (e) => {
@@ -822,6 +846,7 @@ function update(dt) {
   if (game.world === 'gamma') {
     updateCar(dt);
     updateSith(dt);
+    updatePeople(dt);
     updateBuildings(dt);
     updateGrass(cam.x, cam.z);
   }
@@ -932,11 +957,11 @@ function update(dt) {
   if (game.rocket.inside) {
     // на разгоне картинка чуть дрожит, поле зрения раскрывается
     const shake = ROCKET.thrust * airDensity(ROCKET.alt) * 0.006;
-    cam.fov = damp(cam.fov, 1.02 + clamp(ROCKET.gforce - 1, 0, 2) * 0.05, 3, dt);
+    cam.fov = damp(cam.fov, (1.02 + clamp(ROCKET.gforce - 1, 0, 2) * 0.05) / game.zoom, 3, dt);
     cam.yaw += (Math.random() - 0.5) * shake;
     cam.pitch += (Math.random() - 0.5) * shake;
   } else {
-    cam.fov = damp(cam.fov, 1.02, 3, dt);
+    cam.fov = damp(cam.fov, 1.02 / game.zoom, 3, dt);
   }
 
   const wantY = game.rocket.inside ? ROCKET.cockpit[1]
@@ -1023,6 +1048,7 @@ function update(dt) {
   }
 
   syncBombUI();
+  updateBubble();
   if (CAR.inside) { syncCarUI(); carSoundLevel(); }
   fireLevel();
 
@@ -1036,12 +1062,14 @@ function update(dt) {
     const nearTent = home && !game.tent.inside && Math.hypot(cam.x - TENT.x, cam.z - TENT.z) < 4.2;
     const nearRocket = !game.rocket.inside && Math.hypot(cam.x - PAD.x, cam.z - PAD.z) < 6.5;
     const nearCar = !home && !CAR.inside && Math.hypot(cam.x - CAR.x, cam.z - CAR.z) < 4.5;
-    if (nearShape) ui.prompt.textContent = 'Нажмите, чтобы взять';
+    const atBar = nearCafe();
+    if (atBar) ui.prompt.textContent = 'Нажмите или E — взять кофе';
+    else if (nearShape) ui.prompt.textContent = 'Нажмите, чтобы взять';
     else if (nearWater) ui.prompt.textContent = 'Нажмите или E — помыть руки';
     else if (nearTent) ui.prompt.textContent = 'Нажмите или E — расположиться';
     else if (nearCar) ui.prompt.textContent = 'Нажмите или E — сесть за руль';
     else if (nearRocket) ui.prompt.textContent = 'Нажмите или E — сесть в ракету';
-    const hot = nearShape || nearWater || nearTent || nearCar || nearRocket;
+    const hot = atBar || nearShape || nearWater || nearTent || nearCar || nearRocket;
     ui.reticle.classList.toggle('hot', hot);
     ui.prompt.classList.toggle('show', hot);
   } else {

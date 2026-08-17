@@ -174,6 +174,7 @@ const game = {
   tent: { inside: false, yaw: 0, from: null },
   rocket: { inside: false, shown: '' },
   world: 'earth',     // earth | gamma — под ногами один ландшафт, разные палитры
+  zoom: 1,            // приближение вида: во столько раз уже поле зрения
   reduced: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
 };
 
