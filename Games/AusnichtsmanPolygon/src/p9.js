@@ -616,7 +616,8 @@ function spawnPair() {
 }
 
 function updatePairs(dt, camDist) {
-  if (camDist > 55) { PAIRS.n = 0; PAIRS.list.length = 0; return; }
+  // дыры нет — нет и горизонта, у которого паре разойтись
+  if (camDist > 55 || BH.rs < 0.05) { PAIRS.n = 0; PAIRS.list.length = 0; return; }
   const want = Math.round(lerp(PAIR_MAX, 6, smoothstep(18, 55, camDist)));
   while (PAIRS.list.length < want) spawnPair();
 

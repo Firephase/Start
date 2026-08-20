@@ -535,7 +535,8 @@ function drawScene() {
   drawBlast(vp, eye, f);
 
   // — мусор, падающий в дыру: вытянут вдоль радиуса приливными силами
-  if (showWorld && onEarth) {
+  // (испарённой дыре падать уже некуда)
+  if (showWorld && onEarth && BH.rs > 0.05) {
     gl.useProgram(solidProg.prog);
     gl.uniformMatrix4fv(solidProg.u.uVP, false, vp);
     gl.uniform3f(solidProg.u.uTint, 1, 1, 1);
@@ -791,7 +792,9 @@ function drawScene() {
     lensVisible = quasarLens;
   } else {
     lx = BH.pos[0]; ly = BH.pos[1]; lz = BH.pos[2];
-    shadow = Math.atan(BH.rs / Math.max(bDist, BH.rs * 1.2)) / (cam.fov * 0.5) * 0.5;
+    // радиус тени может уйти в ноль (дыру испарили на стенде) — держим
+    // крошечный, но ненулевой: при равных краях smoothstep в шейдере не определён
+    shadow = Math.max(Math.atan(BH.rs / Math.max(bDist, BH.rs * 1.2)) / (cam.fov * 0.5) * 0.5, 2e-4);
     lensVisible = bhHere ? 1 : 0;
   }
   const bx = vp[0] * lx + vp[4] * ly + vp[8] * lz + vp[12];

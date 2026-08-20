@@ -170,6 +170,28 @@
     color: rgba(244, 234, 217, 0.78);
   }
 
+  .lab-why { margin: 0 0 10px; }
+  .lab-why summary {
+    font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--cyan); cursor: pointer; padding: 4px 0;
+    list-style: none;
+  }
+  .lab-why summary::-webkit-details-marker { display: none; }
+  .lab-why summary::before { content: '▸ '; }
+  .lab-why[open] summary::before { content: '▾ '; }
+  .lab-why b {
+    display: block; margin-top: 6px;
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: rgba(244, 234, 217, 0.55); font-weight: 600;
+  }
+  .lab-why p {
+    margin: 3px 0 0;
+    font-size: 11px; line-height: 1.6;
+    color: rgba(244, 234, 217, 0.72);
+    border-left: 1px solid rgba(47, 214, 200, 0.3);
+    padding-left: 9px;
+  }
+
   #lab-plot {
     display: block;
     width: 100%; height: auto;
@@ -805,6 +827,10 @@
       <div class="lab-scroll">
         <div class="lab-formula" id="lab-formula"></div>
         <p class="lab-note" id="lab-note"></p>
+        <details class="lab-why" id="lab-why-box">
+          <summary>Откуда это и где врёт</summary>
+          <div id="lab-why"></div>
+        </details>
         <canvas id="lab-plot" width="640" height="220"></canvas>
         <div class="lab-read" id="lab-read"></div>
         <div class="lab-ctl" id="lab-ctl"></div>
