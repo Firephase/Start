@@ -110,6 +110,7 @@ const rotor = buildRotor();
 const hands = [buildHand(false), buildHand(true)];
 const unitArrow = buildUnitArrow();
 const tentMesh = buildTent();
+labAssets();
 const catMesh = buildCat();
 const glowDot = buildGlow();
 const rocketMesh = buildRocket('full');
@@ -371,6 +372,9 @@ function drawScene() {
   gl.uniform3f(solidProg.u.uTint, 1, 1, 1);
   catMesh.model = catMesh.model || m4();
   catMesh.model.set(model);
+
+  // — квантовый зал: корпус и восемь установок
+  drawLab();
 
   // — вода в баке
   gl.useProgram(waterProg.prog);
@@ -761,6 +765,7 @@ function drawScene() {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, q.idx);
     gl.drawElements(gl.TRIANGLES, q.count, gl.UNSIGNED_SHORT, 0);
   });
+  if (showWorld) drawLabSigns();
   gl.depthMask(true);
   gl.disable(gl.BLEND);
 

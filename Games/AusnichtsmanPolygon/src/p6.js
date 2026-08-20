@@ -581,7 +581,7 @@ canvas.addEventListener('pointerdown', (e) => {
     } else if (game.mode === 'walk') {
       const hit = pick(nx, ny);
       if (hit >= 0) { enterFocus(hit); lookId = null; }
-      else if (buyCoffee() || talkClose() || washHands() || tentSit() || carBoard() || rocketBoard()) lookId = null;
+      else if (labUse() || buyCoffee() || talkClose() || washHands() || tentSit() || carBoard() || rocketBoard()) lookId = null;
     }
   }
 });
@@ -688,7 +688,7 @@ window.addEventListener('keydown', (e) => {
   }
   keys[e.code] = true;
   if (e.code === 'Escape' && game.mode === 'focus') exitFocus();
-  if (e.code === 'KeyE' && game.mode === 'walk') { if (!buyCoffee() && !talkClose() && !washHands() && !tentSit() && !carBoard()) rocketBoard(); }
+  if (e.code === 'KeyE' && game.mode === 'walk') { if (!labUse() && !buyCoffee() && !talkClose() && !washHands() && !tentSit() && !carBoard()) rocketBoard(); }
   if (e.code === 'KeyT' && game.world === 'gamma' && !CAR.inside) openTalk();
   if (e.code === 'KeyB') dropBomb();
   if (e.code === 'Escape' && game.tent.inside) tentLeave();
@@ -851,6 +851,7 @@ function update(dt) {
     updateBuildings(dt);
     updateGrass(cam.x, cam.z);
   }
+  updateLab(dt);
   updateHit(dt);
   updateBlast(dt);
   // тепловая вспышка бьёт по экрану, а мир на секунду заливает светом
@@ -1066,16 +1067,19 @@ function update(dt) {
     const nearRocket = !game.rocket.inside && Math.hypot(cam.x - PAD.x, cam.z - PAD.z) < 6.5;
     const nearCar = !home && !CAR.inside && Math.hypot(cam.x - CAR.x, cam.z - CAR.z) < 4.5;
     const atBar = nearCafe();
+    const atRig = nearStation();
     const atSith = !home && !CAR.inside && Math.hypot(cam.x - SITH.x, cam.z - SITH.z) < 5.5
       && !document.getElementById('talk').classList.contains('show');
-    if (atBar) ui.prompt.textContent = 'Нажмите или E — взять кофе';
+    if (atRig) ui.prompt.textContent = LABS.open ? 'Нажмите или E — отойти от стенда'
+      : 'Нажмите или E — стенд «' + atRig.name + '»';
+    else if (atBar) ui.prompt.textContent = 'Нажмите или E — взять кофе';
     else if (atSith) ui.prompt.textContent = 'Нажмите или E — поговорить';
     else if (nearShape) ui.prompt.textContent = 'Нажмите, чтобы взять';
     else if (nearWater) ui.prompt.textContent = 'Нажмите или E — помыть руки';
     else if (nearTent) ui.prompt.textContent = 'Нажмите или E — расположиться';
     else if (nearCar) ui.prompt.textContent = 'Нажмите или E — сесть за руль';
     else if (nearRocket) ui.prompt.textContent = 'Нажмите или E — сесть в ракету';
-    const hot = atBar || atSith || nearShape || nearWater || nearTent || nearCar || nearRocket;
+    const hot = !!atRig || atBar || atSith || nearShape || nearWater || nearTent || nearCar || nearRocket;
     ui.reticle.classList.toggle('hot', hot);
     ui.prompt.classList.toggle('show', hot);
   } else {

@@ -130,7 +130,9 @@ function gammaMeshH(x, z) {
 
 /** Высота земли в текущем мире. */
 function groundH(x, z) {
-  return game.world === 'earth' ? terrainH(x, z) : gammaMeshH(x, z);
+  if (game.world !== 'earth') return gammaMeshH(x, z);
+  // в зале под ногами плита, а не рельеф
+  return inLab(x, z) ? LAB.floor : terrainH(x, z);
 }
 
 /* ---------------- текстуры Гаммы ---------------- */
