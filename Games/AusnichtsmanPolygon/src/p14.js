@@ -546,15 +546,42 @@ function buildRigs() {
     }
     rigs.schwinger = m.pack();
   }
-  // — туннелирование: волновод с барьером
+  // — туннелирование: волновод с барьером и рядом туннельный микроскоп
   {
     const m = meshBuilder();
     bench(m);
-    m.box(0, 1.00, 0, 0.9, 0.02, 0.16, 0, [0.26, 0.28, 0.32]);
-    m.box(0, 1.14, 0, 0.07, 0.26, 0.17, 0, [0.55, 0.30, 0.62]);    // барьер
-    m.box(-0.82, 1.06, 0, 0.10, 0.08, 0.10, 0, dark);              // источник
-    m.box(0.82, 1.06, 0, 0.10, 0.08, 0.10, 0, dark);               // счётчик
-    m.box(0.82, 1.18, 0, 0.06, 0.03, 0.06, 0, boardLit);
+    // волновод, по которому бежит волна (её рисуют точками поверх)
+    m.box(-0.15, 1.00, 0, 0.86, 0.02, 0.15, 0, [0.26, 0.28, 0.32]);
+    m.box(-0.15, 1.075, 0, 0.045, 0.13, 0.155, 0, [0.55, 0.30, 0.62]);   // барьер
+    m.box(-0.98, 1.06, 0, 0.09, 0.08, 0.09, 0, dark);                 // пушка
+    m.box(0.68, 1.06, 0, 0.09, 0.08, 0.09, 0, dark);                  // счётчик
+    m.box(0.68, 1.17, 0, 0.05, 0.03, 0.05, 0, boardLit);
+
+    // микроскоп: стол на пружинах, колпак, пьезотрубка с остриём
+    const mx = 0.88;
+    m.box(mx, 0.95, 0, 0.26, 0.03, 0.22, 0, [0.34, 0.35, 0.38]);      // виброразвязка
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const nodes = [];
+      for (let k = 0; k <= 8; k++) {
+        const a = (k / 8) * TAU * 2.5;
+        nodes.push([mx + sx * 0.19 + Math.cos(a) * 0.022, 0.91 + k * 0.006, sz * 0.15 + Math.sin(a) * 0.022]);
+      }
+      m.rope(nodes, nodes.map(() => 0.009), steel, 4);
+    }
+    m.box(mx, 1.00, 0, 0.20, 0.02, 0.16, 0, [0.72, 0.60, 0.30]);      // образец
+    // пьезотрубка и остриё
+    m.rope([[mx, 1.36, 0], [mx, 1.10, 0]], [0.055, 0.035], [0.30, 0.31, 0.35], 8);
+    m.rope([[mx, 1.10, 0], [mx, 1.028, 0]], [0.020, 0.002], [0.86, 0.88, 0.92], 6);
+    // кронштейн и колпак
+    m.box(mx + 0.24, 1.20, 0, 0.03, 0.24, 0.10, 0, steel);
+    m.box(mx, 1.42, 0, 0.24, 0.02, 0.20, 0, steel);
+    for (const sx of [-1, 1]) m.rope([[mx + sx * 0.22, 1.42, 0], [mx + sx * 0.22, 0.98, 0]], [0.012, 0.012], [0.42, 0.48, 0.52], 5);
+    // маленький экран микроскопа с картинкой скана
+    m.box(mx - 0.02, 1.30, 0.30, 0.17, 0.12, 0.02, 0.35, board);
+    for (let i = 0; i < 4; i++) {
+      m.box(mx - 0.02 + (i - 1.5) * 0.075, 1.30, 0.28, 0.028, 0.085, 0.005, 0.35,
+            [0.95, 0.55 + 0.12 * (i % 2), 0.20]);
+    }
     rigs.tunnel = m.pack();
   }
   return rigs;
@@ -592,6 +619,207 @@ function dur(sec) {
   if (sec < 1.7e5) return (sec / 3600).toFixed(1) + ' ч';
   if (sec < 3e7) return (sec / 86400).toFixed(1) + ' сут';
   return sci(sec / PH.year, 3) + ' лет';
+}
+
+/* ============================================================
+   Туннелирование: пакет, который видно
+   ------------------------------------------------------------
+   Уравнение Шрёдингера решается прямо в кадре, на сетке.
+   Единицы удобные: нанометры, фемтосекунды, электронвольты —
+   тогда ħ и масса электрона становятся числами порядка единицы.
+   ============================================================ */
+
+const QM = {
+  hbar: 0.6582119569,     // эВ·фс
+  me: 5.6856301,          // эВ·фс²/нм² — это m_e, пересчитанная из m_ec² = 511 кэВ
+};
+
+/* Сетка и состояние пакета. Схема шага — полунеявная (Висшер):
+   сначала двигаем действительную часть по мнимой, потом мнимую по
+   уже новой действительной. Она сохраняет норму и устойчива,
+   пока dt < 2ħ/‖H‖. */
+const WP = {
+  N: 440, xa: -8, xb: 8,           // нм
+  dx: 0, dt: 0.008,                // фс
+  re: null, im: null, V: null, mask: null,
+  t: 0, run: false, launched: false, loop: false,
+  // пакет намеренно длинный: чем он длиннее, тем уже полоса энергий и тем
+  // ближе измеренная доля к формуле для одной энергии
+  sig: 1.35, start: -5.0,          // ширина и место старта пакета, нм
+  left: 0, inside: 0, right: 0,    // куда разошлась вероятность
+  key: '',
+};
+
+function wpAlloc() {
+  WP.dx = (WP.xb - WP.xa) / (WP.N - 1);
+  WP.re = new Float64Array(WP.N);
+  WP.im = new Float64Array(WP.N);
+  WP.V = new Float64Array(WP.N);
+  WP.mask = new Float64Array(WP.N);
+  for (let i = 0; i < WP.N; i++) {
+    // мягкая кайма по краям: пакет уходит и не отражается от границы сетки
+    const e = Math.min(i, WP.N - 1 - i) / (WP.N * 0.10);
+    WP.mask[i] = e >= 1 ? 1 : 0.5 - 0.5 * Math.cos(Math.PI * clamp(e, 0, 1));
+  }
+}
+
+const wpX = (i) => WP.xa + i * WP.dx;
+/** Полуширина барьера в нанометрах. */
+const wpHalf = () => LABS.tunW * 1e9 / 2;
+
+function wpPotential() {
+  const h = wpHalf();
+  for (let i = 0; i < WP.N; i++) WP.V[i] = Math.abs(wpX(i)) <= h ? LABS.tunV : 0;
+}
+
+/** Заново собрать гауссов пакет со средней энергией E. */
+function wpReset() {
+  if (!WP.re) wpAlloc();
+  wpPotential();
+  const k = Math.sqrt(2 * QM.me * LABS.tunE) / QM.hbar;     // нм⁻¹
+  const s = WP.sig;
+  let norm = 0;
+  for (let i = 0; i < WP.N; i++) {
+    const x = wpX(i);
+    const g = Math.exp(-((x - WP.start) ** 2) / (2 * s * s));
+    WP.re[i] = g * Math.cos(k * x);
+    WP.im[i] = g * Math.sin(k * x);
+    norm += g * g;
+  }
+  norm = Math.sqrt(norm * WP.dx) || 1;
+  for (let i = 0; i < WP.N; i++) { WP.re[i] /= norm; WP.im[i] /= norm; }
+  WP.t = 0;
+  WP.launched = false;
+  // шаг по времени держим с запасом от предела устойчивости
+  const kin = (QM.hbar * QM.hbar) / (2 * QM.me * WP.dx * WP.dx);
+  WP.dt = 0.35 * QM.hbar / (4 * kin + LABS.tunV);
+  // опыт заканчиваем, когда прошедшая часть добежала до края, но кайма её
+  // ещё не съела: тогда слева ровно отражённое, справа ровно прошедшее
+  const v = (QM.hbar * k) / QM.me;                       // нм/фс
+  WP.tEnd = clamp((Math.abs(WP.start) + 6.4) / v * 1.05, 3, 120);
+  WP.key = wpKey();
+  WP.scale = 0;
+  wpTally();
+  WP.scale = 0;
+  for (let i = 0; i < WP.N; i++) WP.scale = Math.max(WP.scale, wpDens(i));
+}
+
+/** По чему понятно, что настройки сменились и пакет надо пересобрать. */
+const wpKey = () => LABS.tunE.toFixed(4) + '|' + LABS.tunV.toFixed(4) + '|' + LABS.tunW.toExponential(4);
+
+/** n шагов по времени. */
+function wpStep(n) {
+  const { re, im, V, mask, dx, dt, N } = WP;
+  const c = (QM.hbar * dt) / (2 * QM.me * dx * dx);
+  const d = dt / QM.hbar;
+  for (let s = 0; s < n; s++) {
+    // Re += dt/ħ · H·Im
+    for (let i = 1; i < N - 1; i++) {
+      re[i] += -c * (im[i + 1] - 2 * im[i] + im[i - 1]) + d * V[i] * im[i];
+    }
+    // Im -= dt/ħ · H·Re, уже по новой Re
+    for (let i = 1; i < N - 1; i++) {
+      im[i] -= -c * (re[i + 1] - 2 * re[i] + re[i - 1]) + d * V[i] * re[i];
+    }
+    for (let i = 0; i < N; i++) { re[i] *= mask[i]; im[i] *= mask[i]; }
+    WP.t += dt;
+  }
+  wpTally();
+}
+
+/** Сколько вероятности слева от барьера, внутри и справа. */
+function wpTally() {
+  const h = wpHalf();
+  let l = 0, c = 0, r = 0;
+  for (let i = 0; i < WP.N; i++) {
+    const p = WP.re[i] * WP.re[i] + WP.im[i] * WP.im[i];
+    const x = wpX(i);
+    if (x < -h) l += p; else if (x > h) r += p; else c += p;
+  }
+  const k = WP.dx;
+  const tot = (l + c + r) * k || 1;
+  // доли считаем от того, что ещё на сетке: кайма по краям понемногу гасит волну
+  WP.left = l * k / tot; WP.inside = c * k / tot; WP.right = r * k / tot;
+  WP.norm = tot;
+}
+
+/** Полоса энергий пакета: ΔE = ħ²k·Δk/m при Δk = 1/(2σ). */
+function wpSpread() {
+  const k = Math.sqrt(2 * QM.me * LABS.tunE) / QM.hbar;
+  return (QM.hbar * QM.hbar * k) / (2 * QM.me * WP.sig);
+}
+
+/** Плотность в точке сетки (для картинки и для точек на стенде). */
+const wpDens = (i) => WP.re[i] * WP.re[i] + WP.im[i] * WP.im[i];
+
+/* ---------------- туннельный микроскоп ---------------- */
+
+const STM = {
+  gap: 0.55,        // нм между остриём и образцом
+  phi: 4.5,         // работа выхода, эВ
+  bias: 0.10,       // напряжение на промежутке, В
+  scan: 0,          // где сейчас идёт строчка, 0..1
+  corr: 0.048,      // амплитуда атомного рельефа, нм
+  a: 0.246,         // постоянная решётки графита, нм
+  canvas: null, ctx: null, key: '',
+};
+
+/** Постоянная затухания под барьером работы выхода, нм⁻¹. */
+const stmKappa = () => Math.sqrt(2 * QM.me * STM.phi) / QM.hbar;
+
+/** Ток при зазоре d: I ∝ V·exp(−2κd). Нормирован на 1 нА при 0,5 нм. */
+function stmCurrent(d) {
+  const k = stmKappa();
+  return (STM.bias / 0.10) * Math.exp(-2 * k * (d - 0.5));
+}
+
+/** Пересчитать картинку скана. Дёргается только когда меняется работа выхода. */
+function stmImage(W, H, spanX, spanY) {
+  const key = W + 'x' + H + '|' + STM.phi.toFixed(3);
+  if (STM.key === key) return STM.canvas;
+  if (!STM.canvas) {
+    STM.canvas = document.createElement('canvas');
+    STM.ctx = STM.canvas.getContext('2d');
+  }
+  STM.canvas.width = W; STM.canvas.height = H;
+  const g = STM.ctx;
+  const img = g.createImageData(W, H);
+  const k = stmKappa();
+  const val = new Float32Array(W * H);
+  let lo = 1e9, hi = -1e9;
+  for (let j = 0; j < H; j++) {
+    const y = (j / H - 0.5) * spanY;
+    for (let i = 0; i < W; i++) {
+      const x = (i / W - 0.5) * spanX;
+      const v = 2 * k * stmHeight(x, y);            // логарифм относительного тока
+      val[j * W + i] = v;
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+  }
+  const rng = Math.max(hi - lo, 1e-6);
+  for (let n = 0; n < W * H; n++) {
+    const t = (val[n] - lo) / rng;
+    const q = n * 4;
+    img.data[q] = 26 + 229 * Math.pow(t, 0.85);
+    img.data[q + 1] = 12 + 176 * Math.pow(t, 1.25);
+    img.data[q + 2] = 8 + 96 * Math.pow(t, 2.1);
+    img.data[q + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  STM.key = key;
+  return STM.canvas;
+}
+
+/** Высота поверхности: три волны под 120° дают треугольную решётку. */
+function stmHeight(x, y) {
+  const b = (4 * Math.PI) / (STM.a * Math.sqrt(3));
+  let h = 0;
+  for (let n = 0; n < 3; n++) {
+    const a = (n * TAU) / 3;
+    h += Math.cos(b * (x * Math.cos(a) + y * Math.sin(a)));
+  }
+  return (h / 3) * STM.corr;
 }
 
 /* ---------------- панели стендов ---------------- */
@@ -1066,50 +1294,162 @@ const PANELS = {
   /* — туннелирование — */
   tunnel: {
     why: [
-      'Внутри барьера решение уравнения Шрёдингера не осциллирует, а затухает: k = √(2m(E−V₀))/ħ становится мнимым, k = iκ. Сшивая ψ и ψ′ на обеих границах, получаем систему на четыре коэффициента; отношение прошедшего потока к падающему и даёт T = [1 + V₀²sh²(κl)/(4E(V₀−E))]^(−1). При κl ≫ 1 гиперболический синус переходит в экспоненту и T ≈ 16E(V₀−E)/V₀² · e^(−2κl) — та самая экспоненциальная зависимость от ширины. Выше барьера sh переходит в sin, и при sin(kl) = 0 барьер становится полностью прозрачным.',
-      'Одномерная прямоугольная ступенька — идеализация: настоящий барьер сглажен, и для него берут ВКБ с интегралом ∫κ(x)dx. Задача стационарная: волновой пакет конечной длины ведёт себя сложнее, а вопрос о времени туннелирования до сих пор спорный. Частица нерелятивистская, бесспиновая, без потерь энергии в барьере; многочастичные эффекты и взаимодействие с решёткой не учтены.',
+      'Внутри барьера решение уравнения Шрёдингера не осциллирует, а затухает: k = √(2m(E−V₀))/ħ становится мнимым, k = iκ. Сшивая ψ и ψ′ на обеих границах, получаем систему на четыре коэффициента; отношение прошедшего потока к падающему и даёт T = [1 + V₀²sh²(κl)/(4E(V₀−E))]^(−1). При κl ≫ 1 гиперболический синус переходит в экспоненту и T ≈ 16E(V₀−E)/V₀² · e^(−2κl) — та самая экспоненциальная зависимость от ширины. Выше барьера sh переходит в sin, и при sin(kl) = 0 барьер становится полностью прозрачным. Картинка ниже эту формулу не использует: там честно решается уравнение Шрёдингера на сетке, шаг за шагом, и доли вероятности считаются интегралом.',
+      'Формула для T написана для монохроматической волны, а пакет конечной ширины несёт целую полосу энергий шириной ΔE ≈ ħ²kΔk/m. Через барьер проходят в основном самые быстрые из них, потому что T зависит от энергии экспоненциально, — поэтому измеренная доля всегда выше формулы, а на широком барьере может быть выше в разы. Это не ошибка счёта, а свойство пакета: чем он длиннее, тем уже полоса и тем ближе результат к формуле. Барьер прямоугольный: настоящий сглажен, для него берут ВКБ с интегралом ∫κ(x)dx. Частица нерелятивистская, бесспиновая, одномерная, без потерь энергии в барьере. У краёв сетки стоит мягкая кайма, которая гасит ушедшее, — иначе волна вернулась бы с другой стороны.',
     ],
-    formula: 'κ = √(2m(V₀−E))/ħ   '
-      + 'T = [1 + V₀² sh²(κl) / (4E(V₀−E))]<sup>−1</sup>',
-    note: 'Частица с недостаточной энергией всё равно проходит сквозь барьер: внутри волна не обрывается, а затухает, '
-      + 'и с другой стороны остаётся хвост. Вероятность падает экспоненциально с шириной — '
-      + 'на этом держатся и туннельный микроскоп, и альфа-распад. Выше барьера появляются резонансы, где T = 1.',
+    formula: 'κ = √(2m(V₀−E))/ħ   '
+      + 'T = [1 + V₀² sh²(κl) / (4E(V₀−E))]<sup>−1</sup>   '
+      + 'iħ ∂ψ/∂t = −(ħ²/2m)∂²ψ/∂x² + Vψ',
+    note: 'Пакет запускается слева и налетает на барьер. Часть его отражается, часть просачивается насквозь — '
+      + 'внутри волна не обрывается, а затухает, и с другой стороны остаётся хвост. Это и есть туннелирование; '
+      + 'вероятность падает экспоненциально с шириной, и на этом держатся туннельный микроскоп и альфа-распад. '
+      + 'То же самое видно на самом стенде: волна бежит по волноводу над столом. Рядом стоит туннельный микроскоп — '
+      + 'тот же барьер, только вакуумный: остриё висит над образцом, и ток между ними меняется в разы от смещения на десятую долю нанометра.',
     ctl: [
-      { k: 'sl', label: 'Энергия E', min: 0.02, max: 3, step: 0.01,
+      { k: 'sl', label: 'Энергия E', min: 0.05, max: 3, step: 0.01,
         get: () => LABS.tunE, set: (v) => { LABS.tunE = v; }, fmt: (v) => v.toFixed(2) + ' эВ' },
       { k: 'sl', label: 'Барьер V₀', min: 0.05, max: 3, step: 0.01,
         get: () => LABS.tunV, set: (v) => { LABS.tunV = v; }, fmt: (v) => v.toFixed(2) + ' эВ' },
-      { k: 'sl', label: 'Ширина l', min: 0.05e-9, max: 3e-9, step: 0.01e-9,
+      { k: 'sl', label: 'Ширина l', min: 0.05e-9, max: 2.4e-9, step: 0.01e-9,
         get: () => LABS.tunW, set: (v) => { LABS.tunW = v; }, fmt: (v) => (v * 1e9).toFixed(2) + ' нм' },
+      { k: 'bt', label: () => WP.run ? 'Стоп' : (WP.launched ? 'Ещё раз' : 'Запустить электрон'),
+        on: () => {
+          if (WP.run) { WP.run = false; return; }
+          if (WP.launched) wpReset();
+          WP.run = true; WP.launched = true;
+        } },
+      { k: 'tg', label: 'Повторять', get: () => WP.loop, set: (v) => { WP.loop = v; if (v) { wpReset(); WP.run = true; WP.launched = true; } } },
+      { k: 'sl', label: 'Микроскоп: зазор', min: 0.35, max: 1.1, step: 0.005,
+        get: () => STM.gap, set: (v) => { STM.gap = v; }, fmt: (v) => v.toFixed(3) + ' нм' },
+      { k: 'sl', label: 'Работа выхода φ', min: 2, max: 6, step: 0.05,
+        get: () => STM.phi, set: (v) => { STM.phi = v; }, fmt: (v) => v.toFixed(2) + ' эВ' },
     ],
     read: () => {
       const T = tunnelT(LABS.tunE, LABS.tunV, LABS.tunW);
       const under = LABS.tunE < LABS.tunV;
       const kap = under ? Math.sqrt(2 * PH.me * (LABS.tunV - LABS.tunE) * PH.e) / PH.hbar : 0;
+      const k = stmKappa();
       return [
-        ['прохождение T', sci(T, 4)],
-        ['отражение R', sci(1 - T, 4)],
-        ['один из', T > 0 ? sci(1 / T, 3) : '∞'],
+        ['T по формуле', sci(T, 4)],
+        ['прошло в опыте', WP.launched ? (WP.right * 100).toFixed(2) + ' %' : '—'],
+        ['отразилось', WP.launched ? (WP.left * 100).toFixed(2) + ' %' : '—'],
+        ['ещё в барьере', WP.launched ? (WP.inside * 100).toFixed(2) + ' %' : '—'],
+        ['прошло времени', WP.launched ? WP.t.toFixed(2) + ' фс' : '0 фс'],
+        ['разброс энергии пакета', '±' + wpSpread().toFixed(3) + ' эВ'],
         [under ? 'глубина затухания 1/κ' : 'режим',
           under ? sci(1 / kap * 1e9, 3) + ' нм' : 'над барьером'],
-        ['показатель κl', under ? (kap * LABS.tunW).toFixed(3) : '—'],
         ['длина волны снаружи',
           sci(PH.h / Math.sqrt(2 * PH.me * LABS.tunE * PH.e) * 1e9, 3) + ' нм'],
+        ['ток микроскопа', sci(stmCurrent(STM.gap), 3) + ' нА'],
+        ['κ работы выхода', k.toFixed(2) + ' нм' + sup(-1)],
+        ['на 0,1 нм ближе ток вырастет в', Math.exp(2 * k * 0.1).toFixed(1) + ' раз'],
       ];
     },
     plot: (g, W, H) => {
-      plotFrame(g, W, H, 'l, нм', 'lg T');
-      const wMax = 3e-9;
-      const lgT = (w) => Math.log10(Math.max(tunnelT(LABS.tunE, LABS.tunV, w), 1e-20));
-      const top = lgT(0.02e-9);
-      // нижняя граница подстраивается под кривую, иначе она жмётся к потолку
-      const bot = Math.min(-1, Math.floor(lgT(wMax) - 0.5));
-      plotCurve(g, W, H, (t) => (lgT(0.02e-9 + wMax * t) - bot) / (top - bot), CY);
-      plotMark(g, W, H, LABS.tunW / wMax, WH, 'T = ' + sci(tunnelT(LABS.tunE, LABS.tunV, LABS.tunW), 3));
-      g.fillStyle = 'rgba(244,234,217,0.45)';
-      g.font = '10px ui-sans-serif, Arial, sans-serif'; g.textAlign = 'right';
-      g.fillText('10' + sup(bot), 32, H - 24);
-      g.fillText('1', 32, 16);
+      if (!WP.re) wpReset();
+      g.clearRect(0, 0, W, H);
+      g.fillStyle = 'rgba(6,10,12,0.78)';
+      g.fillRect(0, 0, W, H);
+      const L = 34, R = W - 8;
+      const px = (x) => L + (R - L) * (x - WP.xa) / (WP.xb - WP.xa);
+      const split = H * 0.60;              // выше — волна, ниже — профиль энергии
+      const h = wpHalf();
+
+      // полоса барьера через всю картинку
+      g.fillStyle = 'rgba(150,110,190,0.16)';
+      g.fillRect(px(-h), 8, px(h) - px(-h), H - 22);
+
+      // сетка
+      g.strokeStyle = 'rgba(244,234,217,0.10)'; g.lineWidth = 1;
+      for (let i = -6; i <= 6; i += 2) {
+        g.beginPath(); g.moveTo(px(i), 8); g.lineTo(px(i), H - 14); g.stroke();
+      }
+
+      // — плотность вероятности и действительная часть
+      let mx = 1e-9, mxr = 0;
+      for (let i = 0; i < WP.N; i++) {
+        const d = wpDens(i);
+        if (d > mx) mx = d;
+        if (wpX(i) > h && d > mxr) mxr = d;
+      }
+      // масштаб фиксируем по начальному пакету, чтобы было видно, как он делится
+      WP.scale = WP.t === 0 ? mx : (WP.scale || mx);
+      const sc = Math.max(WP.scale, mx * 0.35);
+      // прошедший хвост обычно в сотню раз ниже — за барьером растягиваем его,
+      // иначе туннелирование просто не увидеть
+      const gain = mxr > 0 ? clamp(sc * 0.45 / mxr, 1, 400) : 1;
+      const scAt = (x) => (x > h ? sc / gain : sc);
+      const base = split - 6;
+      const yOf = (i) => base - clamp(wpDens(i) / scAt(wpX(i)), 0, 1.05) * (base - 14);
+      g.fillStyle = 'rgba(47,214,200,0.28)';
+      g.beginPath();
+      g.moveTo(px(WP.xa), base);
+      for (let i = 0; i < WP.N; i++) g.lineTo(px(wpX(i)), yOf(i));
+      g.lineTo(px(WP.xb), base); g.closePath(); g.fill();
+      g.strokeStyle = CY; g.lineWidth = 1.4;
+      g.beginPath();
+      for (let i = 0; i < WP.N; i++) {
+        if (i) g.lineTo(px(wpX(i)), yOf(i)); else g.moveTo(px(wpX(i)), yOf(i));
+      }
+      g.stroke();
+      if (gain > 1.5) {
+        g.fillStyle = 'rgba(47,214,200,0.75)';
+        g.font = '10px ui-sans-serif, Arial, sans-serif'; g.textAlign = 'center';
+        g.fillText('масштаб ×' + Math.round(gain), (px(h) + px(WP.xb)) / 2, base + 11);
+      }
+      // сама волна: осциллирующая действительная часть
+      const amp = Math.sqrt(sc) || 1;
+      g.strokeStyle = 'rgba(244,234,217,0.42)'; g.lineWidth = 1;
+      g.beginPath();
+      for (let i = 0; i < WP.N; i++) {
+        const y = base - 12 - (WP.re[i] / amp) * (base - 30) * 0.42;
+        if (i) g.lineTo(px(wpX(i)), y); else g.moveTo(px(wpX(i)), y);
+      }
+      g.stroke();
+
+      // — профиль потенциала и уровень энергии
+      const top = Math.max(LABS.tunV, LABS.tunE) * 1.35;
+      const py = (e) => (H - 16) - (e / top) * (H - 16 - split - 4);
+      g.strokeStyle = 'rgba(200,150,240,0.9)'; g.lineWidth = 1.6;
+      g.beginPath();
+      g.moveTo(L, py(0)); g.lineTo(px(-h), py(0)); g.lineTo(px(-h), py(LABS.tunV));
+      g.lineTo(px(h), py(LABS.tunV)); g.lineTo(px(h), py(0)); g.lineTo(R, py(0));
+      g.stroke();
+      g.strokeStyle = RU; g.setLineDash([4, 3]); g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(L, py(LABS.tunE)); g.lineTo(R, py(LABS.tunE)); g.stroke();
+      g.setLineDash([]);
+
+      g.font = '10px ui-sans-serif, Arial, sans-serif';
+      g.fillStyle = RU; g.textAlign = 'left';
+      g.fillText('E = ' + LABS.tunE.toFixed(2) + ' эВ', L + 4, py(LABS.tunE) - 3);
+      g.fillStyle = 'rgba(200,150,240,0.9)'; g.textAlign = 'center';
+      g.fillText('V₀ = ' + LABS.tunV.toFixed(2), (px(-h) + px(h)) / 2, py(LABS.tunV) - 4);
+      g.fillStyle = 'rgba(244,234,217,0.45)'; g.textAlign = 'right';
+      g.fillText('x, нм', R, H - 4);
+      g.textAlign = 'left';
+      g.fillText('|ψ|²', L + 4, 18);
+      if (WP.launched) {
+        g.textAlign = 'right';
+        g.fillStyle = CY;
+        g.fillText('прошло ' + (WP.right * 100).toFixed(1) + ' %', R - 4, 18);
+      }
+    },
+    plot2: (g, W, H) => {
+      // — карта тока под остриём: тот же экспоненциальный закон, но по поверхности.
+      //   Картинка зависит только от работы выхода, поэтому её кешируем.
+      const spanX = 2.6, spanY = spanX * H / W;      // нм
+      stmImage(W, H, spanX, spanY);
+      g.drawImage(STM.canvas, 0, 0);
+      // строчка развёртки
+      const sx = Math.floor(STM.scan * W);
+      g.fillStyle = 'rgba(255,255,255,0.55)';
+      g.fillRect(sx, 0, 1, H);
+      g.fillStyle = 'rgba(6,10,12,0.72)';
+      g.fillRect(0, H - 15, W, 15);
+      g.font = '10px ui-sans-serif, Arial, sans-serif';
+      g.fillStyle = 'rgba(244,234,217,0.75)'; g.textAlign = 'left';
+      g.fillText('скан 2,6 × ' + spanY.toFixed(1) + ' нм · зазор ' + STM.gap.toFixed(3)
+        + ' нм · ток ' + sci(stmCurrent(STM.gap), 2) + ' нА', 6, H - 4);
     },
   },
 };
@@ -1154,6 +1494,8 @@ function labBind() {
   LABUI.ctl = document.getElementById('lab-ctl');
   LABUI.plot = document.getElementById('lab-plot');
   LABUI.g = LABUI.plot.getContext('2d');
+  LABUI.plot2 = document.getElementById('lab-plot2');
+  LABUI.g2 = LABUI.plot2.getContext('2d');
   document.getElementById('lab-close').addEventListener('click', () => closeStation());
 }
 
@@ -1233,6 +1575,7 @@ function labBuild(id) {
     LABUI.rows.push(el);
   }
   LABUI.built = id;
+  LABUI.readHtml = '';
   labSync(true);
 }
 
@@ -1242,8 +1585,11 @@ function labSync(force) {
   const p = PANELS[LABS.open];
   let html = '';
   for (const [k, v] of p.read()) html += '<i>' + k + '</i><b>' + v + '</b>';
-  LABUI.read.innerHTML = html;
+  // перекладываем разметку, только если числа и правда изменились
+  if (html !== LABUI.readHtml) { LABUI.readHtml = html; LABUI.read.innerHTML = html; }
   p.plot(LABUI.g, LABUI.plot.width, LABUI.plot.height);
+  LABUI.plot2.style.display = p.plot2 ? 'block' : 'none';
+  if (p.plot2) p.plot2(LABUI.g2, LABUI.plot2.width, LABUI.plot2.height);
   if (force) for (const el of LABUI.rows) el.__sync();
 }
 
@@ -1343,6 +1689,20 @@ function updateLab(dt) {
     while (LABS.slitDots.length > 2600) LABS.slitDots.shift();
   }
 
+  // туннельный стенд: пакет считается всегда, когда стенд открыт или мы рядом
+  if (LABS.open === 'tunnel' || tunnelNear()) {
+    if (!WP.re || WP.key !== wpKey()) { wpReset(); if (WP.loop) { WP.run = true; WP.launched = true; } }
+    if (WP.run) {
+      // держим постоянный ход опыта: около четырёх фемтосекунд на секунду
+      const steps = clamp(Math.round(4.0 * dt / WP.dt), 1, 1400);
+      wpStep(steps);
+      if (WP.t > WP.tEnd) {
+        if (WP.loop) { wpReset(); WP.run = true; WP.launched = true; } else WP.run = false;
+      }
+    }
+    STM.scan = (STM.scan + dt * 0.22) % 1;
+  }
+
   if (LABS.fibOn) {
     // импульсы идут пачкой: за секунду через горизонт проходит своя доля пробы
     LABS.fibN += dt * 3.0e8;
@@ -1353,8 +1713,78 @@ function updateLab(dt) {
   // панель освежается десять раз в секунду, чаще не нужно
   if (LABS.open) {
     LABUI.acc += dt;
-    if (LABUI.acc > 0.1) { LABUI.acc = 0; labSync(false); }
+    if (LABUI.acc > 0.14) { LABUI.acc = 0; labSync(false); }
   }
+}
+
+/* ---------------- волна на самом стенде ---------------- */
+
+/* Над волноводом туннельного стенда светится цепочка точек: их высота и
+   яркость — та же |ψ|², что и на панели. Считаем только вблизи. */
+const TUNPTS = { n: 72, pos: null, col: null, buf: null, cbuf: null, ready: false };
+
+/** Стоим ли мы достаточно близко к туннельному стенду, чтобы волну считать. */
+function tunnelNear() {
+  if (game.world !== 'earth') return false;
+  const st = STATIONS.find((q) => q.id === 'tunnel');
+  return Math.hypot(cam.x - st.x, cam.z - st.z) < 16;
+}
+
+function tunPointsInit() {
+  TUNPTS.pos = new Float32Array(TUNPTS.n * 3);
+  TUNPTS.col = new Float32Array(TUNPTS.n * 4);
+  TUNPTS.buf = gl.createBuffer();
+  TUNPTS.cbuf = gl.createBuffer();
+  TUNPTS.ready = true;
+}
+
+function tunPointsUpdate() {
+  const st = STATIONS.find((q) => q.id === 'tunnel');
+  const co = Math.cos(-st.yaw), si = Math.sin(-st.yaw);
+  const h = wpHalf();
+  let mx = 1e-9;
+  for (let i = 0; i < WP.N; i++) mx = Math.max(mx, wpDens(i));
+  const sc = Math.max(WP.scale || mx, mx * 0.35);
+  for (let p = 0; p < TUNPTS.n; p++) {
+    const u = p / (TUNPTS.n - 1);
+    const gi = Math.round(u * (WP.N - 1));
+    const d = clamp(wpDens(gi) / sc, 0, 1.6);
+    const lx = -0.15 + (u - 0.5) * 1.72;             // вдоль волновода
+    const ly = 1.05 + d * 0.30;
+    const j = p * 3;
+    TUNPTS.pos[j] = st.x + lx * co;
+    TUNPTS.pos[j + 1] = LAB.y + ly;
+    TUNPTS.pos[j + 2] = st.z + lx * si;
+    const inside = Math.abs(wpX(gi)) <= h;
+    const q = p * 4;
+    TUNPTS.col[q] = inside ? 0.72 : 0.30;
+    TUNPTS.col[q + 1] = inside ? 0.44 : 0.88;
+    TUNPTS.col[q + 2] = inside ? 0.95 : 0.86;
+    TUNPTS.col[q + 3] = clamp(0.12 + d * 1.1, 0, 1);
+  }
+  gl.bindBuffer(gl.ARRAY_BUFFER, TUNPTS.buf);
+  gl.bufferData(gl.ARRAY_BUFFER, TUNPTS.pos, gl.DYNAMIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, TUNPTS.cbuf);
+  gl.bufferData(gl.ARRAY_BUFFER, TUNPTS.col, gl.DYNAMIC_DRAW);
+}
+
+/** Точки волны. Вызывается там же, где пары у горизонта. */
+function drawTunnelWave() {
+  if (!WP.re || !tunnelNear()) return;
+  if (!TUNPTS.ready) tunPointsInit();
+  tunPointsUpdate();
+  gl.useProgram(pointProg.prog);
+  gl.uniformMatrix4fv(pointProg.u.uVP, false, vp);
+  gl.uniform3fv(pointProg.u.uCam, [cam.x, cam.y, cam.z]);
+  gl.uniform1f(pointProg.u.uScale, 15 * (canvas.height / 700));
+  attrib(pointProg.a.aPos, TUNPTS.buf, 3);
+  attrib(pointProg.a.aColor, TUNPTS.cbuf, 4);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+  gl.depthMask(false);
+  gl.drawArrays(gl.POINTS, 0, TUNPTS.n);
+  gl.depthMask(true);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 }
 
 /* ---------------- отрисовка ---------------- */

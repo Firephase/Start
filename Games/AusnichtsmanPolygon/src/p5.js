@@ -738,6 +738,9 @@ function drawScene() {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   }
 
+  // — волна на туннельном стенде: та же |ψ|², что считается на панели
+  if (showWorld && onEarth) drawTunnelWave();
+
   // — подписи фигур: только там, где сами фигуры
   if (onEarth) {
   gl.useProgram(spriteProg.prog);

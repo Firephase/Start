@@ -122,10 +122,11 @@
     max-height: min(74vh, 620px);
     display: none;
     flex-direction: column;
-    background: rgba(8, 14, 16, 0.93);
+    background: rgba(8, 14, 16, 0.96);
     border: 1px solid rgba(47, 214, 200, 0.42);
     border-radius: 3px;
-    backdrop-filter: blur(6px);
+    /* без backdrop-filter: панель почти непрозрачна, а размытие большого
+       прямоугольника каждый кадр стоит четверти частоты кадров */
     overflow: hidden;
   }
   .lab.show { display: flex; }
@@ -192,12 +193,13 @@
     padding-left: 9px;
   }
 
-  #lab-plot {
+  #lab-plot, #lab-plot2 {
     display: block;
     width: 100%; height: auto;
     border: 1px solid var(--edge);
     border-radius: 2px;
   }
+  #lab-plot2 { display: none; margin-top: 7px; image-rendering: auto; }
 
   .lab-read {
     display: grid;
@@ -831,7 +833,8 @@
           <summary>Откуда это и где врёт</summary>
           <div id="lab-why"></div>
         </details>
-        <canvas id="lab-plot" width="640" height="220"></canvas>
+        <canvas id="lab-plot" width="640" height="230"></canvas>
+        <canvas id="lab-plot2" width="320" height="120"></canvas>
         <div class="lab-read" id="lab-read"></div>
         <div class="lab-ctl" id="lab-ctl"></div>
       </div>
